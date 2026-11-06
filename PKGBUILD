@@ -59,6 +59,11 @@ install=cosmalia-session-dinit.install
 source=()
 sha256sums=()
 
+check() {
+  shellcheck -s sh "$startdir/files/usr/bin/cosmalia-session"
+  shellcheck -s bash "$startdir/scripts"/*.sh "$startdir/cosmalia-session-dinit.install"
+}
+
 package() {
   # The repo layout mirrors /, and git preserves the executable bit on the
   # launcher. Copying the tree as-is means a file added under files/ cannot be

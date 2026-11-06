@@ -78,9 +78,15 @@ sudo install -D -o root -g root -m 644 "$root/README.md" \
 sudo install -D -o root -g root -m 644 "$root/LICENSE" \
     /usr/share/licenses/cosmalia-session-dinit/LICENSE
 
-dinitctl --user reload
-echo "reloaded the dinit user manager"
+# Reload dinit user manager if running; otherwise it will pick up changes on next login
+if dinitctl --user list >/dev/null 2>&1; then
+    dinitctl --user reload
+    echo "reloaded the dinit user manager"
+else
+    echo "note: dinit user instance not running; changes will take effect on next login"
+fi
 echo
+
 echo "Cosmalia is installed but was NOT made the greeter default."
 echo "Greeters that read /usr/share/wayland-sessions list it already; gtkgreet"
 echo "users can run: sudo cosmalia-session-default --list"

@@ -6,6 +6,9 @@ type = internal
 # No depends-on: graphical.target (turnstiled not available in this setup)
 # The session launcher manages the compositor and services directly
 
+# Allow user overrides via environment file (optional)
+environment = ${XDG_CONFIG_HOME:-$HOME/.config}/dinit.d/cosmalia-session.env
+
 # Milestone dependencies on the session services: starting the target starts them.
 # The services must not depend back on this target (dinit rejects the loop). They
 # only run as dependencies of the target, so stopping the target stops them too.

@@ -92,10 +92,11 @@ if /usr/bin/dinitctl --user is-active cosmalia-session.target 2>/dev/null; then
 fi
 
 stamp="$XDG_RUNTIME_DIR/.cosmalia-session-start"
-: >"$stamp"
 
 "$comp" --no-xwayland >>"$log" 2>&1 &
 comp_pid=$!
+
+: >"$stamp"
 
 # On logout the session scope SIGTERMs this script, and even a plain
 # "kill <script>" should not leave the shell and the portals behind.
@@ -141,6 +142,15 @@ rm -f "$stamp"
 if [ -n "$sock" ]; then
     export WAYLAND_DISPLAY="${sock##*/}"
 
+    # Export additional session identifiers for better app/portal compatibility
+    export DESKTOP_SESSION=cosmalia
+    if [ -z "${XDG_SESSION_ID:-}" ]; then
+        session_id=$(/usr/bin/loginctl show-session "$(/usr/bin/loginctl | /usr/bin/awk -v u="$USER" '$3 == u {print $1; exit}')" -p Id --value 2>/dev/null || true)
+        if [ -n "$session_id" ]; then
+            export XDG_SESSION_ID="$session_id"
+        fi
+    fi
+
     # cosmic-comp was started without any display in its environment, so
     # publish ours for portals and other D-Bus/dinit-activated services.
     /usr/bin/dbus-update-activation-environment --systemd \
@@ -180,6 +190,7 @@ if [ -n "$sock" ]; then
     fi
 else
     say "compositor socket not found, not starting Noctalia"
+    # Compositor may have died; wait will reap it and exit with its status
 fi
 
 wait "$comp_pid"
