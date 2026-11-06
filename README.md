@@ -32,8 +32,8 @@ Not included — install separately if needed: `xdg-desktop-portal-wlr` (screens
 | `/usr/share/wayland-sessions/cosmalia.desktop` | XDG session entry (shown as **Cosmalia**) |
 | `/usr/share/xdg-desktop-portal/cosmalia-portals.conf` | Portal selection: cosmic for FileChooser/settings/access/remote desktop; GTK fallback; screenshots/screencast disabled |
 | `/etc/dinit.d/user/cosmalia-session.target` | Session target (internal), `depends-ms` on session services |
-| `/etc/dinit.d/user/noctalia` | Noctalia service: `restart=on-failure`, started and stopped with `cosmalia-session.target` |
-| `/etc/dinit.d/user/cosmic-settings-daemon` | Settings daemon service: `restart=on-failure`, started and stopped with `cosmalia-session.target` |
+| `/etc/dinit.d/user/noctalia` | Noctalia service: `restart=on-failure`, `after: cosmic-settings-daemon`, lifecycle bound to target |
+| `/etc/dinit.d/user/cosmic-settings-daemon` | Settings daemon service: `restart=on-failure`, lifecycle bound to target |
 | `/usr/bin/cosmalia-session-default` | Opt-in helper to set gtkgreet default or add to dropdown |
 
 ## Install
@@ -126,9 +126,9 @@ Started by the session (and supervised by dinit):
 | Process | Notes |
 |---------|-------|
 | `cosmic-comp --no-xwayland` | Compositor; started by launcher, must run before socket exists |
-| `noctalia` | Shell; dinit service, `restart=on-failure`, stopped with session target |
+| `noctalia` | Shell; dinit service, `restart=on-failure`, stopped when target stops |
 | `cosmic-settings-daemon` | Config watchers; dinit service, same lifecycle |
-| `xdg-desktop-portal` + `xdg-desktop-portal-cosmic` | Restarted per-login (cosmic backend has no `PartOf`, survives logout with stale `WAYLAND_DISPLAY`) |
+| `xdg-desktop-portal` + `xdg-desktop-portal-cosmic` | Restarted per-login (cosmic backend has no stop-on-logout hook, survives logout with stale `WAYLAND_DISPLAY`) |
 
 Already covered (no session entry needed):
 
@@ -140,16 +140,17 @@ Already covered (no session entry needed):
 
 ```sh
 tail -f "$XDG_RUNTIME_DIR/cosmalia-session.log"          # launcher + compositor
-journalctl --user -b -u noctalia -u cosmic-settings-daemon  # shell + settings daemon
+dinitctl --user log noctalia                              # shell (follow with -f)
+dinitctl --user log cosmic-settings-daemon                # settings daemon (follow with -f)
 ```
 
-The launcher/compositor log is truncated each login. Services log to the journal.
+The launcher/compositor log is truncated each login. Services log via dinit's built-in logging.
 
 ## Troubleshooting
 
 | Issue | Check |
 |-------|-------|
-| Noctalia doesn't start | `journalctl --user -b -u noctalia`, `tail "$XDG_RUNTIME_DIR/cosmalia-session.log"`, `ss -xlp \| grep wayland` |
+| Noctalia doesn't start | `dinitctl --user log noctalia`, `tail "$XDG_RUNTIME_DIR/cosmalia-session.log"`, `ss -xlp \| grep wayland` |
 | Screenshots/screencast broken | Disabled by default (cosmic backend crashes on `ext_image_copy_capture_session_v1`). Install `xdg-desktop-portal-wlr` separately if needed. |
 | File dialogs wrong/missing | `pacman -Q xdg-desktop-portal-cosmic`, `dinitctl --user status xdg-desktop-portal`, check `cosmalia-portals.conf` exists. A user config in `~/.config/xdg-desktop-portal/` overrides it. |
 | "Failed to open service channel Wayland connection" | Expected and harmless (no Mutter service channel under cosmic-comp). |
@@ -180,7 +181,7 @@ sudo rm /usr/share/wayland-sessions/cosmalia.desktop \
 dinitctl --user reload
 
 # Optionally remove compositor
-sudo pacman -S cosmic-comp
+sudo pacman -R cosmic-comp
 ```
 
 Removing the package does not restore the greeter config; point the greeter elsewhere first (the `pre_remove` message reminds you).
