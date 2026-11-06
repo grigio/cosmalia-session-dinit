@@ -140,17 +140,17 @@ Already covered (no session entry needed):
 
 ```sh
 tail -f "$XDG_RUNTIME_DIR/cosmalia-session.log"          # launcher + compositor
-dinitctl --user log noctalia                              # shell (follow with -f)
-dinitctl --user log cosmic-settings-daemon                # settings daemon (follow with -f)
+dinitctl --user catlog noctalia                           # shell (dumps log buffer)
+dinitctl --user catlog cosmic-settings-daemon             # settings daemon (dumps log buffer)
 ```
 
-The launcher/compositor log is truncated each login. Services log via dinit's built-in logging.
+The launcher/compositor log is truncated each login. Services log via dinit's log buffer (use `catlog` to view).
 
 ## Troubleshooting
 
 | Issue | Check |
 |-------|-------|
-| Noctalia doesn't start | `dinitctl --user log noctalia`, `tail "$XDG_RUNTIME_DIR/cosmalia-session.log"`, `ss -xlp \| grep wayland` |
+| Noctalia doesn't start | `dinitctl --user catlog noctalia`, `tail "$XDG_RUNTIME_DIR/cosmalia-session.log"`, `ss -xlp \| grep wayland` |
 | Screenshots/screencast broken | Disabled by default (cosmic backend crashes on `ext_image_copy_capture_session_v1`). Install `xdg-desktop-portal-wlr` separately if needed. |
 | File dialogs wrong/missing | `pacman -Q xdg-desktop-portal-cosmic`, `dinitctl --user status xdg-desktop-portal`, check `cosmalia-portals.conf` exists. A user config in `~/.config/xdg-desktop-portal/` overrides it. |
 | "Failed to open service channel Wayland connection" | Expected and harmless (no Mutter service channel under cosmic-comp). |
