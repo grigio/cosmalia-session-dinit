@@ -13,7 +13,3 @@ command = /usr/bin/cosmic-settings-daemon
 restart = on-failure
 restart-delay = 1
 stop-timeout = 5
-
-# Notify support (if cosmic-settings-daemon implements sd_notify; no-op if not)
-notify = yes
-notify-timeout = 10
