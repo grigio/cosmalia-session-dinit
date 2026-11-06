@@ -65,6 +65,8 @@ property += value-addendum   # additive for some properties
 
 **Key distinction**: `depends-on` is bidirectional (stop cascade), `depends-ms` is start-only.
 
+**Cycles are rejected at load time** — `dinit-check` / `dinitctl reload` fail fast if a cycle exists (e.g. `A → depends-ms: B` and `B → depends-on: A`).
+
 ## Target Pattern (like systemd `.target`)
 
 Use `type = internal` for targets. They don't run commands — they only express dependencies.
@@ -117,6 +119,10 @@ Package installs to `/etc/dinit.d/user/`.
 | `dinitctl --user verify <svc>` | Verify service resolves |
 | `dinitctl --user setenv VAR=value ...` | Set environment variables |
 | `dinitctl --user is-active <svc>` | Check if active |
+| `dinitctl --user catlog <svc>` | Dump service log buffer (no `-f` follow) |
+| `dinitctl --user status <svc>` | Show service state + PID |
+| `dinitctl --user list` | List all loaded services |
+| `dinitctl --user shutdown` | Stop all services + exit dinit |
 
 ## Cosmalia Session Mapping
 
@@ -134,17 +140,21 @@ Package installs to `/etc/dinit.d/user/`.
 
 ```sh
 # In session launcher, after compositor socket found:
-dbus-update-activation-environment --systemd \
+dbus-update-activation-environment \
     WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ...
 dinitctl --user setenv \
     WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ...
 ```
+
+> **Note:** `dbus-update-activation-environment` without `--systemd` works for both systemd and dinit user sessions (it uses the DBUS_SESSION_BUS_ADDRESS).
 
 ## Restart Behavior
 
 - `restart = on-failure` only restarts on non-zero exit or signal (not SIGHUP/SIGINT/SIGUSR1/SIGUSR2/SIGTERM)
 - `smooth-recovery = yes` restarts process without stopping dependents or changing service state
 - `restart-limit-count = 3` / `restart-limit-interval = 10` (default) limits restart loops
+- `restart = always` restarts on any exit (including clean stop via `dinitctl stop`)
+- Use `restart-delay` to add backoff between restarts
 
 ## File Permissions
 
