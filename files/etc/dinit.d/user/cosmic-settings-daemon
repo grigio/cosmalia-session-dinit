@@ -3,9 +3,11 @@
 type = process
 command = /usr/bin/cosmic-settings-daemon
 
-# Hard dependency on cosmalia-session.target (like PartOf=)
-# Stopping cosmalia-session.target stops this service
-depends-on: cosmalia-session.target
+# No `depends-on: cosmalia-session.target` here. The target already pulls this
+# service in with `depends-ms`, and a dependency back on the target makes a loop
+# that dinit refuses to load ("has cyclic dependency"), so the target and the
+# session services never start. The service runs as a dependency of the target
+# and dinit stops it again when the target stops.
 
 # Restart on failure (like systemd Restart=on-failure)
 restart = on-failure

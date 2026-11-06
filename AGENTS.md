@@ -83,12 +83,17 @@ depends-ms: cosmic-settings-daemon
 # noctalia
 type = process
 command = /usr/bin/noctalia
-depends-on: cosmalia-session.target      # like PartOf= (stops with target)
 after: cosmic-settings-daemon            # ordering
 restart = on-failure
 restart-delay = 1
 stop-timeout = 5
 ```
+
+Do **not** add `depends-on: cosmalia-session.target` to the service. The target already
+has `depends-ms` on it, and dinit refuses to load the loop (`has cyclic dependency`),
+so `dinitctl --user start cosmalia-session.target` fails and nothing starts. A service
+that is only running as a dependency of the target is stopped when the target stops, so
+no back-dependency is needed for the `PartOf=` behaviour.
 
 ## User Instance Paths
 
@@ -119,7 +124,7 @@ Package installs to `/etc/dinit.d/user/`.
 |---------|-------|
 | `cosmalia-session.target` (BindsTo=graphical.target) | `type=internal` + `depends-on: graphical.target` |
 | `Wants=noctalia.service` | `depends-ms: noctalia` |
-| `PartOf=cosmalia-session.target` | `depends-on: cosmalia-session.target` |
+| `PartOf=cosmalia-session.target` | nothing: started via the target's `depends-ms`, stopped when the target stops (a back-dependency is a cycle) |
 | `Restart=on-failure` | `restart = on-failure` |
 | `After=` | `after:` or `depends-on:` |
 | `systemctl --user daemon-reload` | `dinitctl --user reload` |

@@ -6,7 +6,8 @@ type = internal
 # No depends-on: graphical.target (turnstiled not available in this setup)
 # The session launcher manages the compositor and services directly
 
-# Milestone dependencies on session services (start them, but don't tie stop lifecycle)
-# Like systemd Wants= - starting target starts these, but stopping them doesn't stop target
+# Milestone dependencies on the session services: starting the target starts them.
+# The services must not depend back on this target (dinit rejects the loop). They
+# only run as dependencies of the target, so stopping the target stops them too.
 depends-ms: noctalia
 depends-ms: cosmic-settings-daemon

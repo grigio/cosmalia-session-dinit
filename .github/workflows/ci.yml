@@ -88,4 +88,13 @@ jobs:
             /etc/dinit.d/user/cosmic-settings-daemon; do
             test -f "$f" && test -s "$f"
           done
+          # The target and the services must not depend on each other in a
+          # loop: dinit refuses to load the target and nothing starts.
+          # The services' executables are not in this container (--nodeps),
+          # so point their commands at /bin/true for the check.
+          tmp=$(mktemp -d)
+          cp /etc/dinit.d/user/* "$tmp"/
+          sed -i 's|^command *=.*|command = /bin/true|' \
+            "$tmp"/noctalia "$tmp"/cosmic-settings-daemon
+          dinit-check -d "$tmp" cosmalia-session.target
           pacman -R --noconfirm cosmalia-session-dinit

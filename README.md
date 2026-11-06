@@ -32,8 +32,8 @@ Not included — install separately if needed: `xdg-desktop-portal-wlr` (screens
 | `/usr/share/wayland-sessions/cosmalia.desktop` | XDG session entry (shown as **Cosmalia**) |
 | `/usr/share/xdg-desktop-portal/cosmalia-portals.conf` | Portal selection: cosmic for FileChooser/settings/access/remote desktop; GTK fallback; screenshots/screencast disabled |
 | `/etc/dinit.d/user/cosmalia-session.target` | Session target (internal), `depends-ms` on session services |
-| `/etc/dinit.d/user/noctalia` | Noctalia service: `restart=on-failure`, `depends-on=cosmalia-session.target` |
-| `/etc/dinit.d/user/cosmic-settings-daemon` | Settings daemon service: `restart=on-failure`, `depends-on=cosmalia-session.target` |
+| `/etc/dinit.d/user/noctalia` | Noctalia service: `restart=on-failure`, started and stopped with `cosmalia-session.target` |
+| `/etc/dinit.d/user/cosmic-settings-daemon` | Settings daemon service: `restart=on-failure`, started and stopped with `cosmalia-session.target` |
 | `/usr/bin/cosmalia-session-default` | Opt-in helper to set gtkgreet default or add to dropdown |
 
 ## Install
