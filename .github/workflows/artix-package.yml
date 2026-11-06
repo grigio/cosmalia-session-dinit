@@ -39,8 +39,8 @@ jobs:
     steps:
       # git has to exist before checkout, otherwise actions/checkout falls back
       # to downloading a tarball and there is no history for the pkgrel count.
-      - name: Bootstrap git and gh
-        run: pacman -Syu --noconfirm --needed --disable-download-timeout git github-cli
+      - name: Bootstrap git, gh, and shellcheck
+        run: pacman -Syu --noconfirm --needed --disable-download-timeout git github-cli shellcheck
 
       - uses: actions/checkout@v6
         with:
