@@ -33,11 +33,15 @@ url='https://github.com/grigio/cosmalia-session-dinit'
 license=(MIT)
 # cosmic-settings-daemon is what serves the cosmic-config watchers (theme,
 # appearance, keybind changes) over D-Bus; without it nothing reloads live.
-# The file chooser is served by the cosmic backend (xdg-desktop-portal-cosmic)
-# through /usr/share/xdg-desktop-portal/cosmalia-portals.conf.
-# Screenshot and ScreenCast are disabled (cosmic backend crashes on
-# ext_image_copy_capture_session_v1); install xdg-desktop-portal-wlr separately
-# if you need them.
+# The file chooser, settings, access and remote desktop are served by the
+# cosmic backend (xdg-desktop-portal-cosmic) through
+# /usr/share/xdg-desktop-portal/cosmalia-portals.conf. That file also uses the
+# GTK backend as the fallback for Print/Account/Email/etc., so the GTK portal
+# implementation is a hard dependency.
+# Screenshot/ScreenCast go to the wlroots portal backend: the cosmic backend
+# crashes on ext_image_copy_capture_session_v1, and xdg-desktop-portal-wlr
+# implements the same ext_image_copy_capture protocol cosmic-comp exposes.
+# That is what makes OBS's "Screen Capture (PipeWire)" source available.
 # polkit ships polkit-agent-helper-1, the helper used by Noctalia's built-in
 # polkit agent. gnome-keyring provides the Secret Service browsers expect.
 # wireplumber is the PipeWire session manager; pipewire-pulse only requires the
@@ -48,6 +52,8 @@ depends=(
   cosmic-settings
   cosmic-settings-daemon
   xdg-desktop-portal-cosmic
+  xdg-desktop-portal-gtk
+  xdg-desktop-portal-wlr
   polkit
   gnome-keyring
   wireplumber

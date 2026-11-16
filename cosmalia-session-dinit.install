@@ -2,6 +2,13 @@
 # does not edit /etc/greetd: installing a package should not change which
 # session the greeter starts. Making Cosmalia the default is an explicit step.
 post_install() {
+  # The backlight rule must be applied to the already-present sysfs device;
+  # without this the brightness widget stays read-only until the next boot.
+  if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=backlight --action=add 2>/dev/null || true
+  fi
+
   cat <<'EOF'
 Cosmalia is installed. It was NOT set as the default session: this package
 does not edit /etc/greetd.
@@ -18,6 +25,12 @@ EOF
 }
 
 post_upgrade() {
+  # Re-apply the backlight rule in case it changed in this version.
+  if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=backlight --action=add 2>/dev/null || true
+  fi
+
   if grep -qs '/usr/local/bin/cosmic-comp-traffic-session' \
       /etc/greetd/config.toml /etc/greetd/environments 2>/dev/null; then
     cat <<'EOF'

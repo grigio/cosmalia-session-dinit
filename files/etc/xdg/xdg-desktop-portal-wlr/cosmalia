@@ -1,0 +1,11 @@
+# Screen capture for the Cosmalia session.
+#
+# cosmic-comp's interactive capture-source picker does not work reliably with
+# xdg-desktop-portal-wlr: OBS creates a screencast session and it is cancelled
+# immediately ("Failed to select source, denied or cancelled by user"). Skip
+# the picker and capture the built-in panel directly. This file is picked up
+# because XDG_CURRENT_DESKTOP=cosmalia:COSMIC (xdpw tries "cosmalia" first).
+[screencast]
+chooser_type = none
+output_name = eDP-1
+max_fps = 30

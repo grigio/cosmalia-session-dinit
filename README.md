@@ -21,11 +21,13 @@ Installing the package **does not** change the greeter default. Cosmalia is inst
 | `noctalia` | Bar, dock, launcher, notifications, lock, idle, MPRIS, polkit agent |
 | `cosmalia-session` | Session launcher, XDG entry, dinit user services, greeter helper |
 | `cosmic-settings-daemon` | Live theme/keybind changes via cosmic-config |
-| `xdg-desktop-portal-cosmic` | File chooser, settings, access, remote desktop (screenshots/screencast disabled) |
-| `polkit` + `gnome-keyring` | Polkit helper + Secret Service |
+| `xdg-desktop-portal-cosmic` | File chooser, settings, access, remote desktop |
+| `xdg-desktop-portal-wlr` | Screenshot/screen cast via `ext_image_copy_capture` (OBS screen capture) |
+| `polkit` + `gnome-keyring` | Polkit daemon/agent helper + Secret Service |
+| `xdg-desktop-portal-gtk` | Fallback portal backend for Print/Account/Email/etc. |
 
 **Not included** - install separately if needed:
-`xdg-desktop-portal-wlr` (it works better with OBS), `voxtype`, `syncthing`, `gvfs`, `polkit-gnome` (fallback agent).
+`voxtype`, `syncthing`, `gvfs`, `polkit-gnome` (fallback agent).
 
 ---
 
@@ -35,7 +37,10 @@ Installing the package **does not** change the greeter default. Cosmalia is inst
 |------|---------|
 | `/usr/bin/cosmalia-session` | Session launcher: starts compositor → finds Wayland socket → sets env → restarts portals → starts dinit target |
 | `/usr/share/wayland-sessions/cosmalia.desktop` | XDG session entry (shown as **Cosmalia**) |
-| `/usr/share/xdg-desktop-portal/cosmalia-portals.conf` | Portal selection: cosmic for FileChooser/settings/access/remote desktop; GTK fallback; screenshots/screencast disabled |
+| `/usr/share/xdg-desktop-portal/cosmalia-portals.conf` | Portal selection: cosmic for FileChooser/settings/access/remote desktop, wlr for ScreenCast/Screenshot (OBS), GTK fallback |
+| `/etc/xdg/xdg-desktop-portal-wlr/cosmalia` | Screen capture without the broken interactive picker: captures `eDP-1` directly |
+| `/etc/udev/rules.d/99-cosmalia-backlight.rules` | Backlight sysfs write access for the `video` group (brightness control) |
+| `/usr/share/polkit-1/rules.d/cosmalia-session.rules` | Polkit policy so local admins can change Wi-Fi networks |
 | `/etc/dinit.d/user/cosmalia-session.target` | Session target (internal), `depends-ms` on session services |
 | `/etc/dinit.d/user/noctalia` | Noctalia service: `restart=on-failure`, `after: cosmic-settings-daemon` |
 | `/etc/dinit.d/user/cosmic-settings-daemon` | Settings daemon service: `restart=on-failure` |
@@ -111,6 +116,42 @@ Already covered (no session entry needed):
 
 **Environment:** `XDG_CURRENT_DESKTOP=cosmalia:COSMIC` — the `:COSMIC` suffix selects the cosmic portal backend; `cosmalia` first makes `cosmalia-portals.conf` win.
 
+### Permissions that the session needs
+
+- **Brightness:** Noctalia writes `/sys/class/backlight/*/brightness` itself. A
+  minimal elogind setup only tags backlights with `seat`, leaving the sysfs
+  file `root:root 0644`, so the widget reports "brightness control
+  unavailable". The installed udev rule gives the `video` group write access;
+  your user must be in `video` (check with `id`). `post_install` triggers udev
+  so it works without a reboot.
+- **Polkit:** `polkitd` is a system service and Noctalia's built-in agent is
+  enabled by default (`shell.polkit_agent = true`). Under dinit the user
+  services run in a `user-1000.userspawn` cgroup, *not* in the logind session
+  cgroup, so polkit reports `subject.local/active` as false and the agent
+  cannot register ("Cannot determine session the caller is in"). The launcher
+  therefore passes `XDG_SESSION_ID`/`XDG_SESSION_CLASS` to the user manager
+  and the D-Bus activation environment (fixes lock/idle integration), and the
+  shipped rule authorises NetworkManager by **group** instead of by locality.
+  Verify with `pkcheck --action-id org.freedesktop.NetworkManager.settings.modify.system --process $$`.
+- **NetworkManager:** the installed polkit rule lets members of `wheel` (or
+  `sudo`) change Wi-Fi connections without waiting on an authentication
+  agent. This is what makes Noctalia's network widget able to switch networks
+  without a "Not authorized to control networking" error.
+- **Keyring:** Noctalia reads its encrypted storage key from the Secret
+  Service at startup. If the `login` keyring's password does not match the
+  account password (e.g. the account password was changed later), PAM cannot
+  unlock it and a keyring prompt appears on every login. SDDM's PAM stack
+  already includes `pam_gnome_keyring.so`; make sure the keyring password
+  matches the login password. To recreate the keyring from scratch (losing
+  stored secrets), stop `gnome-keyring-daemon`, move
+  `~/.local/share/keyrings/login.keyring` aside and log in again.
+- **xdg-portal:** the portals are D-Bus activated (there are no dinit units for
+  them). The launcher publishes `WAYLAND_DISPLAY` in the D-Bus activation
+  environment and stops stale portal processes from a previous login so D-Bus
+  starts fresh ones. `cosmalia-portals.conf` pins all COSMIC interfaces and
+  uses the GTK backend as fallback, hence the `xdg-desktop-portal-gtk`
+  dependency.
+
 ### dinit Services
 
 ```
@@ -147,8 +188,12 @@ The launcher/compositor log is truncated each login. Services log via dinit's lo
 | Issue | Check |
 |-------|-------|
 | Noctalia doesn't start | `dinitctl --user catlog noctalia`, `tail "$XDG_RUNTIME_DIR/cosmalia-session.log"`, `ss -xlp \| grep wayland` |
-| Screenshots/screencast broken | Disabled by default (cosmic backend crashes on `ext_image_copy_capture_session_v1`). Install `xdg-desktop-portal-wlr` separately if needed. |
-| File dialogs wrong/missing | `pacman -Q xdg-desktop-portal-cosmic`, `dinitctl --user status xdg-desktop-portal`, check `cosmalia-portals.conf` exists. A user config in `~/.config/xdg-desktop-portal/` overrides it. |
+| Brightness control unavailable | `id` (must include `video`), `ls -l /sys/class/backlight/*/brightness` (must be `root:video 664`), `udevadm trigger --subsystem-match=backlight --action=add` |
+| Cannot switch Wi-Fi network | `pkcheck --action-id org.freedesktop.NetworkManager.settings.modify.system --process $$`, `id` (must include `wheel`), check `/usr/share/polkit-1/rules.d/cosmalia-session.rules` |
+| Portal backends not starting | `XDG_CURRENT_DESKTOP=cosmalia:COSMIC /usr/lib/xdg-desktop-portal -v -r`, `pacman -Q xdg-desktop-portal-gtk xdg-desktop-portal-cosmic` |
+| No "Screen Capture (PipeWire)" source in OBS | `pacman -Q xdg-desktop-portal-wlr`, check `cosmalia-portals.conf` has `ScreenCast=wlr`, then restart xdg-desktop-portal and OBS. The cosmic backend crashes on `ext_image_copy_capture_session_v1`, so wlr must serve ScreenCast. |
+| Screen capture selector is cancelled immediately | cosmic-comp's interactive capture picker does not work with xdg-desktop-portal-wlr. The shipped `/etc/xdg/xdg-desktop-portal-wlr/cosmalia` sets `chooser_type=none` and `output_name=eDP-1`, so capture starts without a picker. Change `output_name` if your display is not `eDP-1` (see `wayland-info`). |
+| File dialogs wrong/missing | `pacman -Q xdg-desktop-portal-cosmic xdg-desktop-portal-gtk`, `XDG_CURRENT_DESKTOP=cosmalia:COSMIC /usr/lib/xdg-desktop-portal -v -r`, check `cosmalia-portals.conf` exists. A user config in `~/.config/xdg-desktop-portal/` overrides it. |
 | "Failed to open service channel Wayland connection" | Expected and harmless (no Mutter service channel under cosmic-comp). |
 | Traffic-light decorations missing | Ensure `cosmic-comp` package is installed (provides them). |
 | Greeter doesn't default to Cosmalia | Intentional on install. Run `sudo cosmalia-session-default` or pick it once (Noctalia Greeter remembers). |
@@ -175,8 +220,12 @@ sudo rm /usr/share/wayland-sessions/cosmalia.desktop \
         /etc/dinit.d/user/cosmic-settings-daemon \
         /usr/share/xdg-desktop-portal/cosmalia-portals.conf \
         /usr/share/doc/cosmalia-session-dinit/README.md \
-        /usr/share/licenses/cosmalia-session-dinit/LICENSE
-dinitctl --user reload
+        /usr/share/licenses/cosmalia-session-dinit/LICENSE \
+        /usr/share/polkit-1/rules.d/cosmalia-session.rules \
+        /etc/udev/rules.d/99-cosmalia-backlight.rules
+# `reload` needs a service name in this dinit version; new services are
+# discovered on demand, so this is only needed if they are still loaded.
+dinitctl --user reload cosmalia-session.target 2>/dev/null || true
 
 # Optionally remove compositor
 sudo pacman -R cosmic-comp

@@ -78,10 +78,20 @@ sudo install -D -o root -g root -m 644 "$root/README.md" \
 sudo install -D -o root -g root -m 644 "$root/LICENSE" \
     /usr/share/licenses/cosmalia-session-dinit/LICENSE
 
+# The backlight rule has to be applied to the device that is already there;
+# otherwise brightness control stays unavailable until the next boot.
+if command -v udevadm >/dev/null 2>&1; then
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger --subsystem-match=backlight --action=add
+    echo "reloaded udev rules for backlight devices"
+fi
+
 # Reload dinit user manager if running; otherwise it will pick up changes on next login
 if dinitctl --user list >/dev/null 2>&1; then
-    dinitctl --user reload
-    echo "reloaded the dinit user manager"
+    for svc in cosmalia-session.target noctalia cosmic-settings-daemon; do
+        dinitctl --user reload "$svc" 2>/dev/null || true
+    done
+    echo "reloaded the dinit user service definitions"
 else
     echo "note: dinit user instance not running; changes will take effect on next login"
 fi

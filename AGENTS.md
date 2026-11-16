@@ -1,161 +1,127 @@
-# Dinit Usage Notes for Cosmalia Session
+# Dinit Notes for Cosmalia Session
 
-## Service Description Format
+## Format and paths
 
-Dinit uses **single files** in `/etc/dinit.d/user/` (or `$XDG_CONFIG_HOME/dinit.d/`) — NOT directories with `start/dependencies/type` files.
+Services are **single files**, not directories with `start/dependencies/type`:
 
-Each service file is a plain-text key-value format:
-```
+```ini
 property = value
 property += value-addendum   # additive for some properties
 # comment
 ```
 
-## Key Learnings from Debugging
+User dirs, in order: `$XDG_CONFIG_HOME/dinit.d`, `~/.config/dinit.d`,
+`/etc/dinit.d/user`, `/usr/lib/dinit.d/user`, `/usr/local/lib/dinit.d/user`.
+This package installs to `/etc/dinit.d/user/`, mode `644`.
 
-### 1. dinitctl environment propagation
-- `dinitctl --user import-environment` **does not exist** in dinitctl
-- Use `dinitctl --user setenv VAR=value ...` instead
-- Always propagate `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP`, `XDG_SESSION_TYPE`, `XDG_SESSION_DESKTOP`, `XDG_RUNTIME_DIR`, `PATH` to user dinit after compositor starts
+## Rules learned while debugging
 
-### 2. Graphical target dependency
-- Turnstiled provides `graphical.target` but may not be running in minimal setups
-- **Don't depend on `graphical.target`** unless turnstiled is guaranteed
-- Session launcher should manage its own target (`cosmalia-session.target`)
+1. **No `graphical.target`.** Turnstiled may be absent; the launcher owns
+   `cosmalia-session.target`. Never add `depends-on: graphical.target`.
+2. **Order:** `cosmic-comp` → find its Wayland socket → publish env →
+   `dinitctl --user start cosmalia-session.target`. Noctalia needs `WAYLAND_DISPLAY`.
+3. **No back-dependency.** The target uses `depends-ms` on the services; adding
+   `depends-on: cosmalia-session.target` to a service creates a cycle and nothing
+   starts. Stopping the target already stops those services.
+4. **Command names:** `is-active`, `verify` and bare `reload` do not exist —
+   use `is-started`, `dinit-check --user` and `reload <svc>` (see tables).
+5. **After package upgrades:** `dinitctl --user reload <svc>` for changed
+   services; new ones load on demand via `start`.
+6. **Portals are D-Bus activated**, not dinit units. Stop stale ones with an
+   anchored pattern (`pkill -u "$USER" -f '^/usr/lib/xdg-desktop-portal'`) and let
+   D-Bus restart them with fresh env. `cosmalia-portals.conf` must route
+   ScreenCast/Screenshot to `wlr`; the cosmic backend crashes on
+   `ext_image_copy_capture_session_v1`. Ship
+   `/etc/xdg/xdg-desktop-portal-wlr/cosmalia` with `chooser_type=none` and a fixed
+   `output_name` — cosmic-comp's interactive picker cancels immediately.
+7. **Env propagation:** no `--systemd` for `dbus-update-activation-environment`
+   (no systemd user manager). Pass `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP`,
+   `XDG_SESSION_TYPE`, `XDG_SESSION_DESKTOP`, `XDG_SESSION_ID`, `XDG_SESSION_CLASS`,
+   `DESKTOP_SESSION`, `XDG_RUNTIME_DIR`, `PATH` to both D-Bus activation and
+   `dinitctl --user setenv`. Without `XDG_SESSION_ID`, Noctalia cannot resolve the
+   logind session (lock/idle monitoring breaks).
+8. **Polkit + cgroup gotcha:** dinit user services live in
+   `/user-1000.userspawn`, not the logind session cgroup, so polkit reports
+   `subject.local/active = false` and Noctalia's agent cannot register
+   ("Cannot determine session the caller is in"). Authorise NetworkManager by
+   group (`wheel`/`sudo`), not by locality.
+9. **Brightness:** Noctalia writes `/sys/class/backlight/*/brightness` directly.
+   elogind only tags backlights with `seat`; a udev rule must `chgrp video` /
+   `chmod 0664` that file (GROUP/MODE on the device do not affect sysfs attributes).
+10. **Keyring prompt:** Noctalia reads its encrypted storage key from the Secret
+    Service at startup. If the `login` keyring password differs from the account
+    password, PAM cannot unlock it and a prompt appears every login. Reset the
+    keyring (back it up first) or change its password to match login.
+11. **OBS:** aborts on startup with "Failed to load core OBS modules" if
+    `obs-webrtc.so` cannot find `libssl.so.4`. Keep `openssl` 4 installed, with
+    `openssl-3` alongside for older `libssl.so.3` consumers.
+12. **DRM:** only one DRM compositor at a time; stop the greeter/compositor
+    before testing manually or `/dev/dri/card*` gives "Permission denied".
+    `agreety` works without a compositor; `regreet`/`tuigreet` do not.
 
-### 3. Compositor + shell ordering
-- `cosmic-comp` must start first and create Wayland socket
-- Shell (`noctalia`) needs `WAYLAND_DISPLAY` env var to connect
-- Launcher script should: start compositor → find socket → set env → start dinit target
+## Service types
 
-### 4. Greetd greeters
-- `cosmic-greeter` requires `cosmic-comp` (runs as `cosmic-greeter-start`)
-- `regreet`/`tuigreet` are GTK/Wayland apps - **need compositor**, don't work bare
-- `agreety` is framebuffer TUI - works without compositor, proper greetd greeter
-- Use `agreety --cmd /usr/bin/cosmalia-session` for simple default session
+| Type | Use |
+|------|-----|
+| `process` | One supervised process |
+| `bgprocess` | Daemon that writes a PID file |
+| `scripted` | Custom start/stop commands |
+| `internal` | Grouping only (targets) |
+| `triggered` | Internal, waits for an external trigger |
 
-### 5. DRM device conflicts
-- Two DRM compositors can't share GPU simultaneously
-- Stop greetd/greeter before testing session manually
-- `cosmic-greeter` holds GPU on VT1; session fails with "Permission denied" on `/dev/dri/card*`
+## Dependencies
 
-### 6. Service reload after package upgrade
-- User dinit may cache old service definitions
-- Always run `dinitctl --user reload <service>` in launcher after socket found
-- Then `dinitctl --user start cosmalia-session.target`
+| Property | Behaviour | systemd |
+|----------|-----------|---------|
+| `depends-on: svc` | Start first; stop cascades if svc stops | `Requires=` + `After=` |
+| `depends-ms: svc` | Start first; no stop cascade | `Wants=` + `After=` |
+| `waits-for: svc` | Wait for start/fail, no requirement | weak `After=` |
+| `after: svc` | Ordering only | `After=` |
 
-## Service Types
+Cycles are rejected at load time (`dinit-check` / `dinitctl reload` fail fast).
 
-| Type | Description |
-|------|-------------|
-| `process` | Single supervised process (start/stop with service) |
-| `bgprocess` | Daemonizing process that writes PID file |
-| `scripted` | Started/stopped by executing commands |
-| `internal` | No external process; for grouping via dependencies |
-| `triggered` | Like internal but waits for external trigger |
-
-## Dependency Properties
-
-| Property | Behavior | systemd equivalent |
-|----------|----------|-------------------|
-| `depends-on: svc` | Hard dep: start svc first, stop dependent if svc stops | `Requires=` + `After=` |
-| `depends-ms: svc` | Milestone: start svc first, but stop doesn't affect dependent | `Wants=` + `After=` |
-| `waits-for: svc` | Wait for svc to start/fail, but don't require it | `After=` (weak) |
-| `after: svc` | Ordering only: if svc is starting, wait for it; no dep implied | `After=` (no Requires) |
-
-**Key distinction**: `depends-on` is bidirectional (stop cascade), `depends-ms` is start-only.
-
-**Cycles are rejected at load time** — `dinit-check` / `dinitctl reload` fail fast if a cycle exists (e.g. `A → depends-ms: B` and `B → depends-on: A`).
-
-## Target Pattern (like systemd `.target`)
-
-Use `type = internal` for targets. They don't run commands — they only express dependencies.
+## Patterns
 
 ```ini
-# cosmalia-session.target
+# cosmalia-session.target  (type internal = systemd .target)
 type = internal
-depends-on: graphical.target     # like BindsTo=
-depends-ms: noctalia                     # like Wants=
+depends-ms: noctalia
 depends-ms: cosmic-settings-daemon
 ```
-
-## Service Pattern (like systemd `.service`)
-
 ```ini
-# noctalia
+# noctalia  (type process = systemd .service)
 type = process
 command = /usr/bin/noctalia
-after: cosmic-settings-daemon            # ordering
+after: cosmic-settings-daemon
 restart = on-failure
 restart-delay = 1
 stop-timeout = 5
 ```
 
-Do **not** add `depends-on: cosmalia-session.target` to the service. The target already
-has `depends-ms` on it, and dinit refuses to load the loop (`has cyclic dependency`),
-so `dinitctl --user start cosmalia-session.target` fails and nothing starts. A service
-that is only running as a dependency of the target is stopped when the target stops, so
-no back-dependency is needed for the `PartOf=` behaviour.
+## dinitctl (user instance)
 
-## User Instance Paths
+| Command | Notes |
+|---------|-------|
+| `dinitctl --user start\|stop\|restart <svc>` | Manage a service |
+| `dinitctl --user reload <svc>` | Reload its definition (needs a name) |
+| `dinitctl --user is-started <svc>` | 0 = started, 1 = not started (**not** `is-active`) |
+| `dinitctl --user status <svc>` / `catlog <svc>` | State+PID / dump log buffer (no `-f`) |
+| `dinitctl --user list` / `shutdown` | List services / stop all |
+| `dinitctl --user setenv K=V ...` / `unsetenv K ...` | Manager environment |
+| `dinit-check --user <svc>` | Verify resolution/deps (**no** `verify` command) |
 
-Default user service directories (in order):
-1. `$XDG_CONFIG_HOME/dinit.d`
-2. `$HOME/.config/dinit.d`
-3. `/etc/dinit.d/user`
-4. `/usr/lib/dinit.d/user`
-5. `/usr/local/lib/dinit.d/user`
-
-Package installs to `/etc/dinit.d/user/`.
-
-## dinitctl Commands
-
-| Command | Description |
-|---------|-------------|
-| `dinitctl --user start <svc>` | Start service + deps |
-| `dinitctl --user stop <svc>` | Stop service + dependents |
-| `dinitctl --user restart <svc>` | Restart service |
-| `dinitctl --user reload <svc>` | Reload service description |
-| `dinitctl --user verify <svc>` | Verify service resolves |
-| `dinitctl --user setenv VAR=value ...` | Set environment variables |
-| `dinitctl --user is-active <svc>` | Check if active |
-| `dinitctl --user catlog <svc>` | Dump service log buffer (no `-f` follow) |
-| `dinitctl --user status <svc>` | Show service state + PID |
-| `dinitctl --user list` | List all loaded services |
-| `dinitctl --user shutdown` | Stop all services + exit dinit |
-
-## Cosmalia Session Mapping
+## systemd → dinit quick map
 
 | systemd | dinit |
 |---------|-------|
-| `cosmalia-session.target` (BindsTo=graphical.target) | `type=internal` + `depends-on: graphical.target` |
-| `Wants=noctalia.service` | `depends-ms: noctalia` |
-| `PartOf=cosmalia-session.target` | nothing: started via the target's `depends-ms`, stopped when the target stops (a back-dependency is a cycle) |
+| `Wants=foo` | `depends-ms: foo` |
+| `Requires=foo` | `depends-on: foo` |
+| `After=foo` | `after: foo` |
+| `PartOf=target` | nothing (stopped via the target's `depends-ms`) |
 | `Restart=on-failure` | `restart = on-failure` |
-| `After=` | `after:` or `depends-on:` |
-| `systemctl --user daemon-reload` | `dinitctl --user reload` |
-| `systemctl --user is-active` | `dinitctl --user is-active` |
+| `daemon-reload` | `dinitctl --user reload <svc>` (per service) |
+| `is-active` | `dinitctl --user is-started <svc>` |
 
-## Environment Propagation
-
-```sh
-# In session launcher, after compositor socket found:
-dbus-update-activation-environment \
-    WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ...
-dinitctl --user setenv \
-    WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ...
-```
-
-> **Note:** `dbus-update-activation-environment` without `--systemd` works for both systemd and dinit user sessions (it uses the DBUS_SESSION_BUS_ADDRESS).
-
-## Restart Behavior
-
-- `restart = on-failure` only restarts on non-zero exit or signal (not SIGHUP/SIGINT/SIGUSR1/SIGUSR2/SIGTERM)
-- `smooth-recovery = yes` restarts process without stopping dependents or changing service state
-- `restart-limit-count = 3` / `restart-limit-interval = 10` (default) limits restart loops
-- `restart = always` restarts on any exit (including clean stop via `dinitctl stop`)
-- Use `restart-delay` to add backoff between restarts
-
-## File Permissions
-
-Service files should be `644`. The `command` is executed as the user running the user instance.
+`restart = on-failure` ignores clean signals; `smooth-recovery = yes` restarts
+without stopping dependents; `restart-limit-count = 3` (interval 10s) caps loops;
+`restart = always` also restarts on clean exits.

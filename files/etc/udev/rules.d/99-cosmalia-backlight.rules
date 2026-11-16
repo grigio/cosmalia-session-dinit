@@ -1,0 +1,15 @@
+# Allow the desktop user to change display brightness from userspace.
+#
+# Noctalia's brightness widget reads and writes
+# /sys/class/backlight/*/brightness directly. On a minimal dinit/elogind
+# session there is no "uaccess" rule for backlight sysfs attributes (elogind
+# only tags them with "seat"), so the files stay root:root 0644 and the
+# widget reports "brightness control unavailable" even though a logind
+# session exists. Granting the video group write access is the same fix
+# brightnessctl ships; Noctalia does not need brightnessctl itself.
+#
+# GROUP=/MODE= apply to /dev nodes, not to sysfs attributes, so the only way
+# to change a backlight's sysfs permissions is to chmod/chgrp the file.
+ACTION=="add", SUBSYSTEM=="backlight", \
+  RUN+="/usr/bin/chgrp video /sys/class/backlight/%k/brightness", \
+  RUN+="/usr/bin/chmod 0664 /sys/class/backlight/%k/brightness"
