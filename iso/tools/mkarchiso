@@ -397,6 +397,9 @@ _make_packages() {
 
 # Customize installation.
 _make_customize_airootfs() {
+    # Artix provides artix-chroot (artools-base); Arch hosts provide arch-chroot.
+    local _chroot_cmd=arch-chroot
+    command -v artix-chroot >/dev/null 2>&1 && _chroot_cmd=artix-chroot
     local passwd=()
 
     if [[ -e "${profile}/airootfs/etc/passwd" ]]; then
@@ -428,9 +431,9 @@ _make_customize_airootfs() {
         _unshare chmod -f -- +x "${pacstrap_dir}/root/customize_airootfs.sh"
         # Unset TMPDIR to work around https://bugs.archlinux.org/task/70580
         if (( EUID != 0 )); then
-            eval -- env -u TMPDIR arch-chroot -N "${pacstrap_dir}" "/root/customize_airootfs.sh"
+            eval -- env -u TMPDIR "$_chroot_cmd" -N "${pacstrap_dir}" "/root/customize_airootfs.sh"
         else
-            eval -- env -u TMPDIR arch-chroot "${pacstrap_dir}" "/root/customize_airootfs.sh"
+            eval -- env -u TMPDIR "$_chroot_cmd" "${pacstrap_dir}" "/root/customize_airootfs.sh"
         fi
         _unshare rm -- "${pacstrap_dir}/root/customize_airootfs.sh"
         _msg_info "Done! customize_airootfs.sh run successfully."
