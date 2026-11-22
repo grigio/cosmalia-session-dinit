@@ -11,7 +11,7 @@ ISO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # Keep the generated packages and the mkarchiso work dir outside the source
 # repo, but put the finished ISO in the project's own (gitignored) iso/out/.
 # Point SESSION_SRC_DIR at the repo; override for CI or a different checkout.
-SRC_DIR="${SESSION_SRC_DIR:-/home/g/Code/cosmalia-session-dinit}"
+SRC_DIR="${SESSION_SRC_DIR:-$HOME/Code/cosmalia-session-dinit}"
 [[ -f "$SRC_DIR/PKGBUILD" ]] || {
     echo "SESSION_SRC_DIR does not look like the cosmalia-session-dinit repo: $SRC_DIR" >&2
     exit 1

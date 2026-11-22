@@ -61,7 +61,7 @@ jobs:
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           # build.sh lives with the ISO project and reads the session sources
-          # from SESSION_SRC_DIR (the checkout, not /home/g/...). Packages and
+          # from SESSION_SRC_DIR (the checkout, not the local $HOME path). Packages and
           # mkarchiso scratch must stay outside the checkout; the ISO itself
           # could go to iso/out/, but CI keeps all artifacts under /tmp.
           su builder -s /bin/bash -c "cd '$GITHUB_WORKSPACE/iso' && \
