@@ -1,15 +1,22 @@
-# Cosmalia — Minimal COSMIC Desktop
+# Cosmalia: Minimal COSMIC Desktop on dinit
 
 ![Cosmalia Desktop](./cosmalia-session-dinit.png)
 
 **Cosmalia** is a minimal Wayland desktop running in under 0.8 GB RAM, built from:
 
-- **cosmic-comp** or **cosmic-comp-traffic** - COSMIC Wayland compositor (traffic-light decorations, blur, animations, 3-finger swipes, in-process Alt+Tab)
+- **cosmic-comp-traffic** - COSMIC Wayland compositor (traffic-light decorations, blur, animations, 3-finger swipes, in-process Alt+Tab)
 - **Noctalia** - Shell: bar, dock, launcher, notifications, lock screen, idle/suspend, MPRIS, polkit agent
 
-`cosmalia-session` is the opinionated XDG session that starts them together. It appears in any Wayland-capable login manager (ly, greetd, SDDM, Noctalia Greeter).
+`cosmalia-session` is the opinionated XDG session that starts them together. It appears in any Wayland-capable login manager (like greetd).
 
 Installing the package **does not** change the greeter default. Cosmalia is installed and selectable; making it the default is a separate, explicit step.
+
+> **Which Cosmalia should I use?** This repository is the **dinit** variant. It
+> runs on Artix Linux, needs no systemd, and works on older x86-64 hardware
+> without the x86-64-v3 instruction set. If your computer is new, you want
+> packages built for **x86-64-v3**, or you want **systemd**, use the
+> [Arch Linux based cosmalia-session](https://github.com/grigio/cosmalia-session)
+> instead. Same desktop, but with an Arch/CachyOS base, systemd and gtkgreet.
 
 ---
 
@@ -17,7 +24,7 @@ Installing the package **does not** change the greeter default. Cosmalia is inst
 
 | Component | Role |
 |-----------|------|
-| `cosmic-comp` | Compositor (DRM/KMS, `--no-xwayland`) |
+| `cosmic-comp-traffic` | Compositor (DRM/KMS, `--no-xwayland`) |
 | `noctalia` | Bar, dock, launcher, notifications, lock, idle, MPRIS, polkit agent |
 | `cosmalia-session` | Session launcher, XDG entry, dinit user services, greeter helper |
 | `cosmic-settings-daemon` | Live theme/keybind changes via cosmic-config |
@@ -26,7 +33,7 @@ Installing the package **does not** change the greeter default. Cosmalia is inst
 | `polkit` + `gnome-keyring` | Polkit daemon/agent helper + Secret Service |
 | `xdg-desktop-portal-gtk` | Fallback portal backend for Print/Account/Email/etc. |
 
-**Not included** - install separately if needed:
+**Not included** (install separately if needed):
 `voxtype`, `syncthing`, `gvfs`, `polkit-gnome` (fallback agent).
 
 ---
@@ -50,7 +57,11 @@ Installing the package **does not** change the greeter default. Cosmalia is inst
 
 ## Install
 
-**Recommended — package (pacman owns `/usr`):**
+This package contains only scripts, services and configuration files
+(`arch=any`). It runs on baseline x86-64 and makes no x86-64-v3 assumptions. See
+the note at the top if you would rather use the systemd / x86-64-v3 build.
+
+**Recommended: package (pacman owns `/usr`)**
 
 ```sh
 # From GitHub release
@@ -114,7 +125,7 @@ Already covered (no session entry needed):
 
 - `dbus-broker` (user bus), `pipewire`/`wireplumber` (audio), `gnome-keyring-daemon` (Secret Service, PAM-unlocked at login), `gvfs-*`/`xdg-document-portal` (D-Bus activated), `upower`/`power-profiles-daemon`/`NetworkManager` (system services)
 
-**Environment:** `XDG_CURRENT_DESKTOP=cosmalia:COSMIC` — the `:COSMIC` suffix selects the cosmic portal backend; `cosmalia` first makes `cosmalia-portals.conf` win.
+**Environment:** `XDG_CURRENT_DESKTOP=cosmalia:COSMIC`. The `:COSMIC` suffix selects the cosmic portal backend, while putting `cosmalia` first makes `cosmalia-portals.conf` win.
 
 ### Permissions that the session needs
 
@@ -167,7 +178,7 @@ $ dinitctl --user list
 [{+}     ] cosmic-settings-daemon (pid: 789)
 ```
 
-The session target (`cosmalia-session.target`) is an `internal` type with `depends-ms` on `noctalia` and `cosmic-settings-daemon`. Services do **not** depend back on the target — dinit would reject the cycle. Stopping the target stops the services automatically.
+The session target (`cosmalia-session.target`) is an `internal` type with `depends-ms` on `noctalia` and `cosmic-settings-daemon`. Services do **not** depend back on the target: dinit would reject the cycle. Stopping the target stops the services automatically.
 
 ---
 
@@ -237,4 +248,4 @@ Removing the package does not restore the greeter config; point the greeter else
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
