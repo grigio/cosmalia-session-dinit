@@ -138,7 +138,7 @@ else
             case "$candidate" in
                 brave*) BROWSER_NAME="brave-origin" ;;
                 *ungoogled*) BROWSER_NAME="ungoogled-chromium" ;;
-                *) BROWSER_NAME="Chromium" ;;
+                *) BROWSER_NAME="chromium" ;;
             esac
             break
         fi

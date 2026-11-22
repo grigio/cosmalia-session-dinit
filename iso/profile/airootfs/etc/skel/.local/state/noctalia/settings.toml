@@ -33,7 +33,10 @@ minimum_brightness = 0.01
 cross_axis_padding = 1
 enabled = true
 icon_size = 32
-pinned = [ "alacritty", "@BROWSER@", "octopi", "com.system76.CosmicSettings" ]
+# Noctalia 5.6 matches pinned ids exactly and case-sensitively against the
+# desktop file stem: Alacritty.desktop -> "Alacritty", chromium.desktop ->
+# "chromium", octopi.desktop -> "octopi".
+pinned = [ "Alacritty", "@BROWSER@", "octopi", "com.system76.CosmicSettings" ]
 reserve_space = false
 show_dots = true
 
