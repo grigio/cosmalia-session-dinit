@@ -1,0 +1,16 @@
+#!/usr/bin/ash
+# Include the boot-logging hook in the initramfs.
+
+build() {
+    # Must be add_runscript (not add_file): this registers the hook in
+    # /config so its run_hook() actually executes during boot. add_file only
+    # copies the script and silently leaves the hook disabled.
+    add_runscript
+}
+
+help() {
+    cat <<EOF
+Records boot progress in BOOTLOG.TXT on the live USB's ARCHISO_EFI FAT
+partition, for debugging black screens on real hardware.
+EOF
+}

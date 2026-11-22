@@ -31,33 +31,23 @@ jobs:
     steps:
       - name: Bootstrap build tools
         run: |
-          # The base container's mirrorlist has dead mirrors and no [extra];
-          # point it at reachable Artix and Arch mirrors before pacman -Syu.
+          # Only Artix repositories; the base container mirrorlist may be dead.
           cat >/etc/pacman.d/mirrorlist <<'EOF'
           Server = https://mirror.clarkson.edu/artix-linux/repos/$repo/os/$arch
           Server = https://mirror1.artixlinux.org/repos/$repo/os/$arch
           Server = https://mirrors.dotsrc.org/artix-linux/repos/$repo/os/$arch
           EOF
-          cat >/etc/pacman.d/mirrorlist-arch <<'EOF'
-          Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
-          Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
-          EOF
-          grep -q '^\[extra\]' /etc/pacman.conf || cat >>/etc/pacman.conf <<'EOF'
-
-          [extra]
-          Include = /etc/pacman.d/mirrorlist-arch
-          EOF
-          # The Artix container does not trust Arch signing keys; build tools
-          # come over HTTPS. The ISO itself still verifies packages.
           sed -i 's|^SigLevel.*|SigLevel = Optional TrustAll|' /etc/pacman.conf
           pacman -Syu --noconfirm --needed --disable-download-timeout \
             git github-cli sudo curl mkinitcpio squashfs-tools grub syslinux \
-            dosfstools mtools libisoburn shellcheck extra/archiso
+            dosfstools mtools libisoburn shellcheck
 
       - name: Checkout (with tags for pkgver/pkgrel)
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          # workflow_dispatch must build the requested tag, not master.
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - name: Prepare unprivileged builder (makepkg refuses root)
         run: |
@@ -70,15 +60,31 @@ jobs:
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          # build.sh now lives with the ISO project and reads the session
-          # sources from SESSION_SRC_DIR (the checkout, not /home/g/...).
-          # build.sh refuses to write inside SESSION_SRC_DIR, so keep all
-          # generated artifacts under /tmp, outside the checkout.
+          # build.sh lives with the ISO project and reads the session sources
+          # from SESSION_SRC_DIR (the checkout, not /home/g/...). Packages and
+          # mkarchiso scratch must stay outside the checkout; the ISO itself
+          # could go to iso/out/, but CI keeps all artifacts under /tmp.
           su builder -s /bin/bash -c "cd '$GITHUB_WORKSPACE/iso' && \
             SESSION_SRC_DIR='$GITHUB_WORKSPACE' \
             ISO_REPO_DIR='/tmp/cosmalia-iso-repo' \
             ISO_OUT_DIR='/tmp/cosmalia-iso-out' \
             ISO_WORK_DIR='/tmp/cosmalia-iso-work' ./build.sh"
+
+      - name: Verify ISO contents
+        run: |
+          set -euo pipefail
+          W=/tmp/cosmalia-iso-work
+          # Two GRUB entries, both booting dinit.
+          [ "$(grep -c '^menuentry' "$W/grub/grub.cfg")" = 2 ]
+          grep -q 'menuentry "Cosmalia Live (Artix dinit)"' "$W/grub/grub.cfg"
+          grep -q 'copytoram=y' "$W/grub/grub.cfg"
+          # Pure Artix image: no Arch repos or packages.
+          P="$W/iso/cosmalia/pkglist.x86_64.txt"
+          ! grep -qiE 'archlinux|extra/' "$P"
+          grep -q '^ungoogled-chromium ' "$P"
+          grep -q '^cosmalia-session-dinit ' "$P"
+          grep -q '^greetd ' "$P"
+          echo 'ISO verification passed: Artix-only packages, 2 GRUB entries'
 
       - name: Attach ISO to release
         env:

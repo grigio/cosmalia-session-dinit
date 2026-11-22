@@ -4,8 +4,12 @@ set -euo pipefail
 
 ISO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RESULT="${TEST_RESULT_DIR:-$ISO_DIR/test-results}"
-ISO="$(find "$ISO_DIR/out" -maxdepth 1 -name '*.iso' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
-[[ -n "$ISO" ]] || { echo "No ISO found in $ISO_DIR/out; run ./build.sh first" >&2; exit 1; }
+# build.sh writes to the project's iso/out; older builds used this script's
+# own out/ directory. Accept either, newest first.
+SRC_DIR="${SESSION_SRC_DIR:-$HOME/Code/cosmalia-session-dinit}"
+ISO="$(find "$SRC_DIR/iso/out" "$ISO_DIR/out" -maxdepth 1 -name '*.iso' \
+    -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+[[ -n "$ISO" ]] || { echo "No ISO found in $SRC_DIR/iso/out or $ISO_DIR/out; run ./build.sh first" >&2; exit 1; }
 
 mkdir -p "$RESULT"
 cp -f /usr/share/edk2/x64/OVMF_VARS.4m.fd "$RESULT/OVMF_VARS.fd"
@@ -18,7 +22,7 @@ echo "==> Results in $RESULT"
 
 qemu-system-x86_64 \
   -name cosmalia-artix-live-test \
-  -enable-kvm -cpu host -m 4096 -smp 4 \
+  -enable-kvm -cpu host -m "${QEMU_RAM:-4096}" -smp 4 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd \
   -drive if=pflash,format=raw,file="$RESULT/OVMF_VARS.fd" \
   -cdrom "$ISO" -boot order=d \

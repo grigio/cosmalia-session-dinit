@@ -1,16 +1,14 @@
 # --- bootstrap -------------------------------------------------------------
 base
 
-# --- Artix kernel, initramfs and keyrings ----------------------------------
+# --- Artix kernel, initramfs and keyring ----------------------------------
 linux
 linux-firmware
 intel-ucode
 amd-ucode
 mkinitcpio
-# archiso mkinitcpio hooks (Arch [extra], Artix ships its own artix hooks).
-mkinitcpio-archiso
+# The live initcpio hooks are vendored from Artix artools, no Arch packages.
 artix-keyring
-archlinux-keyring
 syslinux
 
 # --- dinit userspace (Artix [system] / [world]) ----------------------------
@@ -33,6 +31,14 @@ cosmalia-session-dinit
 # D-Bus activation in customize_airootfs.sh (screenshots use the wlr backend).
 xdg-desktop-portal-cosmic
 
+# --- GPU rendering / diagnostics -------------------------------------------
+# QEMU's QXL card only needs Mesa's software driver, but real AMD/Intel GPUs
+# need the i915 / xe / radeonsi DRI drivers shipped by mesa. Pull it in
+# explicitly so a dependency change cannot silently drop hardware rendering.
+mesa
+# lspci -nnk is used by cosmalia-session's DRM diagnostics on real hardware.
+pciutils
+
 # --- desktop ---------------------------------------------------------------
 # cosmic-comp-traffic (pinned release, local repo) is appended by build.sh;
 # it provides/replaces cosmic-comp.
@@ -41,11 +47,8 @@ cosmic-settings
 cosmic-settings-daemon
 cosmic-icon-theme
 alacritty
-# Arch chromium needs libsimdutf.so.37; Artix [world] only ships .so.36, so
-# pin this one library from Arch [extra] (satisfies chromium's `simdutf` dep).
-extra/simdutf
 
-# browser line (brave-origin or chromium) is appended by build.sh
+# browser line (ungoogled-chromium from Artix galaxy) is appended by build.sh
 
 # --- tools used by the copied cosmic-comp shortcuts ------------------------
 playerctl

@@ -78,6 +78,16 @@ def main():
             break
     say("=== boot reached login prompt ===")
 
+    # Surface the initramfs progress beacons from cosmalia_bootlog. They are
+    # the evidence that the squashfs mount, overlay mount and switch_root to
+    # dinit all completed (and pinpoint the stage if a real USB boot stalls).
+    markers = [l.strip() for l in clean(boot).split("\n")
+               if "cosmalia:" in l or "artix: mount handler" in l]
+    if markers:
+        say("--- initramfs boot markers ---")
+        for line in markers:
+            say(line)
+
     def login(timeout=10):
         for attempt in range(4):
             drain(ser, 0.5)
@@ -138,8 +148,8 @@ def main():
         ("wayland socket", "ls -l /run/user/1000/wayland-* 2>&1 || true"),
         ("user dinit services", "sudo -u liveuser env XDG_RUNTIME_DIR=/run/user/1000 dinitctl --user list 2>&1 || true"),
         ("cosmalia log", "cat /run/user/1000/cosmalia-session.log 2>&1 || true"),
-        ("packages", "pacman -Q cosmalia-session-dinit cosmic-comp-traffic noctalia greetd greetd-tuigreet alacritty cosmic-settings simdutf 2>&1; pacman -Q chromium brave-origin-bin ungoogled-chromium 2>/dev/null || true"),
-        ("chromium libs", "ldd /usr/lib/chromium/chromium 2>&1 | grep 'not found' || echo ALL_LIBS_OK"),
+        ("packages", "pacman -Q cosmalia-session-dinit cosmic-comp-traffic noctalia greetd greetd-tuigreet alacritty cosmic-settings ungoogled-chromium simdutf 2>&1"),
+        ("browser libs", "ldd \"$(command -v ungoogled-chromium)\" 2>&1 | grep 'not found' || echo ALL_LIBS_OK"),
         ("noctalia settings", "grep -E '^(config_version|builtin|mode|position)' /home/liveuser/.local/state/noctalia/settings.toml"),
         ("syncthing extension", "grep -i syncthing /home/liveuser/.local/state/noctalia/settings.toml && echo FOUND || echo CLEAN"),
         ("copied shortcuts", "ls -1 /home/liveuser/.config/cosmic/com.system76.CosmicSettings.Shortcuts/v1/"),

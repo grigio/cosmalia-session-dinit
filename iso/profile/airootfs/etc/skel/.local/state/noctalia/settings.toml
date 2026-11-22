@@ -1,6 +1,6 @@
 # Sanitised Noctalia defaults for the live ISO.
-# @BROWSER@ is replaced by build.sh with the browser actually shipped
-# (brave-origin, or chromium when brave-origin is not in the repositories).
+# @BROWSER@ is replaced by build.sh with the Artix browser actually shipped
+# (ungoogled-chromium, or firefox as a fallback).
 config_version = 20
 
 [backdrop]
@@ -34,8 +34,8 @@ cross_axis_padding = 1
 enabled = true
 icon_size = 32
 # Noctalia 5.6 matches pinned ids exactly and case-sensitively against the
-# desktop file stem: Alacritty.desktop -> "Alacritty", chromium.desktop ->
-# "chromium", octopi.desktop -> "octopi".
+# desktop file stem: Alacritty.desktop -> "Alacritty",
+# ungoogled-chromium.desktop -> "ungoogled-chromium", octopi.desktop -> "octopi".
 pinned = [ "Alacritty", "@BROWSER@", "octopi", "com.system76.CosmicSettings" ]
 reserve_space = false
 show_dots = true

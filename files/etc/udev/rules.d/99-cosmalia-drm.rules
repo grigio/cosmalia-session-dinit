@@ -1,0 +1,7 @@
+# Fallback for live/embedded sessions where elogind has not created an
+# active seat yet (dinit user services run outside the session cgroup).
+# logind's dynamic ACLs still take precedence when a seat does exist; these
+# static permissions only keep cosmic-comp from getting "Permission denied"
+# on /dev/dri/card* when it starts before the session is fully registered.
+SUBSYSTEM=="drm", KERNEL=="card[0-9]*", GROUP="video", MODE="0660"
+SUBSYSTEM=="drm", KERNEL=="renderD[0-9]*", GROUP="video", MODE="0666"

@@ -1,0 +1,12 @@
+#!/bin/bash
+# From Artix artools (initcpio/install/artix_loop_mnt).
+
+build() {
+    add_runscript
+}
+
+help() {
+    cat <<'EOF'
+Loop-device mounting support for the Artix live hook.
+EOF
+}

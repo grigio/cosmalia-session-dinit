@@ -2,6 +2,8 @@
 pkg/
 src/
 out/
+# Live ISOs built by iso/build.sh live in iso/out/ (root-owned until chowned)
+/iso/out/
 *.pkg.tar.zst
 *.pkg.tar.zst.sha256
 *.pkg.tar.zst.sig

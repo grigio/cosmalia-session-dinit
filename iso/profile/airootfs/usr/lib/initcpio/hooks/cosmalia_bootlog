@@ -1,0 +1,151 @@
+# Busybox ash — boot-chain instrumentation for the Artix live hook.
+#
+# The real-hardware symptom this file exists to expose is a boot that stops
+# right after the kernel prints:
+#
+#     squashfs: version 4.0 (2009/01/31) Phillip Lougher
+#
+# That line is printed when the squashfs module is loaded, i.e. immediately
+# before the initramfs mounts /dev/loopN on /run/artix/sfs/airootfs and just
+# before the root overlay is assembled. If either step stalls, the console
+# otherwise shows nothing further and it is impossible to tell which one.
+# Here every stage prints a marker and is also written to BOOTLOG.TXT on the
+# live USB (and /run/cosmalia-bootlog.txt).
+#
+# All overrides are defined at file scope, not inside run_hook(). mkinitcpio's
+# run_hookfunctions() re-sources hook files between hooks; a definition nested
+# inside run_hook() is easy to lose track of. This hook is sourced after the
+# artix hooks, so its versions of _mnt_dev / _mnt_overlayfs are the ones the
+# mount handler actually calls. They are self-contained copies of the Artix
+# implementations with markers added -- no function-copy tricks (busybox ash
+# has no declare -f) and no self-recursive wrappers.
+
+_cosmalia_espmnt=/run/cosmalia-bootlog
+_cosmalia_espdev=""
+
+_cosmalia_bootlog_local() {
+    # busybox in the initramfs has no date(1); uptime is enough as a marker.
+    printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime 2>/dev/null)" "$*" >>/run/cosmalia-bootlog.txt 2>/dev/null || true
+}
+
+# Write to both the console (msg) and the persistent log. The console marker
+# is what matters when a mount hangs: the log copy can only be read later.
+_cosmalia_stage() {
+    msg "cosmalia: $*"
+    _cosmalia_bootlog_local "$*"
+    _cosmalia_bootlog "$*"
+}
+
+_cosmalia_bootlog() {
+    _cosmalia_bootlog_local "$@"
+    [ -n "$_cosmalia_espdev" ] || return 0
+    mkdir -p "$_cosmalia_espmnt" 2>/dev/null || return 0
+    if ! mountpoint -q "$_cosmalia_espmnt" 2>/dev/null; then
+        # Some firmwares need a moment before the partition is usable; try
+        # both an explicit vfat mount and filesystem autodetection.
+        mount -t vfat -o rw,umask=000 "$_cosmalia_espdev" "$_cosmalia_espmnt" 2>/dev/null ||
+            mount -o rw,umask=000 "$_cosmalia_espdev" "$_cosmalia_espmnt" 2>/dev/null ||
+            return 0
+    fi
+    printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime 2>/dev/null)" "$*" >>"$_cosmalia_espmnt/BOOTLOG.TXT" 2>/dev/null || true
+    sync
+}
+
+# Faithful override of artix's _mnt_dev() with markers before and after the
+# blocking mount. The kernel's "squashfs: version 4.0" line is emitted inside
+# the mount -t squashfs call, so if boot stops there the marker names the
+# exact device/mountpoint pair that is stuck.
+# args: device, mountpoint, flags, opts
+_mnt_dev() {
+    local dev="${1}"
+    local mnt="${2}"
+    local flg="${3}"
+    local opts="${4}"
+
+    mkdir -p "${mnt}"
+    msg ":: Mounting '${dev}' to '${mnt}'"
+    _cosmalia_stage "mount: start dev=${dev} mnt=${mnt} flags=${flg} opts=${opts}"
+
+    while ! poll_device "${dev}" 30; do
+        echo "ERROR: '${dev}' device did not show up after 30 seconds..."
+        echo "   Falling back to interactive prompt"
+        echo "   You can try to fix the problem manually, log out when you are finished"
+        launch_interactive_shell
+    done
+
+    if mount -o "${opts}" "${flg}" "${dev}" "${mnt}"; then
+        msg ":: Device '${dev}' mounted successfully."
+        _cosmalia_stage "mount: dev=${dev} mounted successfully"
+    else
+        echo "ERROR; Failed to mount '${dev}'"
+        echo "   Falling back to interactive prompt"
+        echo "   You can try to fix the problem manually, log out when you are finished"
+        _cosmalia_stage "mount: FAILED dev=${dev}"
+        launch_interactive_shell
+    fi
+}
+
+# Override the Artix hook's overlay mount. Kernel 7.x enables overlayfs
+# uuid=auto/xino/index by default; a live RAM overlay needs none of them, and
+# the xattr work on the 1.4 GB lower squashfs has stalled on real hardware.
+# Bracketing the call tells an overlay stall apart from a squashfs stall.
+# args: source, newroot, mountpoint
+_mnt_overlayfs() {
+    local src="${1}"
+    local newroot="${2}"
+    local mnt="${3}"
+    local work_dir="/run/artix/overlay_root/work"
+    local upper_dir="/run/artix/overlay_root/upper"
+    local rc
+
+    mkdir -p "${upper_dir}" "${work_dir}"
+    _cosmalia_stage "overlay: mounting lowerdir=${src:-<empty>} on ${newroot}${mnt}"
+    mount -t overlay -o "lowerdir=${src},upperdir=${upper_dir},workdir=${work_dir},uuid=off,xino=off,index=off,metacopy=off" overlay "${newroot}${mnt}"
+    rc=$?
+    _cosmalia_stage "overlay: mount returned ${rc}"
+    return "${rc}"
+}
+
+run_hook() {
+    # On real hardware udev may still be settling when this hook runs; without
+    # the by-label link no log would be written at all (which hides the real
+    # failure). Wait up to 10 s for it.
+    i=0
+    while [ "$i" -lt 100 ]; do
+        [ -e /dev/disk/by-label/ARCHISO_EFI ] && break
+        i=$((i + 1))
+        sleep 0.1
+    done
+    _cosmalia_espdev=/dev/disk/by-label/ARCHISO_EFI
+    [ -e "$_cosmalia_espdev" ] || _cosmalia_espdev=""
+    modprobe vfat 2>/dev/null || true
+
+    _cosmalia_stage "hooks done: kernel $(uname -r), esp=${_cosmalia_espdev:-none}, live=${artixdevice:-unset}, dir=${artixbasedir:-unset}"
+
+    # Wrap the Artix mount handler so we can see whether it returns.
+    if [ -n "${mount_handler:-}" ]; then
+        _cosmalia_orig_mount_handler="$mount_handler"
+        mount_handler=_cosmalia_mount_handler
+        _cosmalia_stage "wrapping mount handler: ${_cosmalia_orig_mount_handler}"
+    else
+        _cosmalia_stage "WARNING: no mount handler to wrap"
+    fi
+}
+
+_cosmalia_mount_handler() {
+    _cosmalia_stage "mount handler: start newroot=$1"
+    "$_cosmalia_orig_mount_handler" "$@"
+    _cosmalia_rc=$?
+    _cosmalia_stage "mount handler: returned ${_cosmalia_rc}"
+    return "${_cosmalia_rc}"
+}
+
+# Registered as a late hook automatically because add_runscript() scans for
+# run_latehook. Called by /init after the mount handler, right before
+# switch_root. Seeing this line means dinit is about to become PID 1.
+run_latehook() {
+    local next_init
+    next_init="$(getarg init)" || next_init=""
+    [ -n "$next_init" ] || next_init="/sbin/init"
+    _cosmalia_stage "root ready: switch_root -> ${next_init} (dinit)"
+}

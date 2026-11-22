@@ -8,8 +8,12 @@ set -euo pipefail
 
 ISO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RESULT="${RUN_RESULT_DIR:-$ISO_DIR/run}"
-ISO="$(find "$ISO_DIR/out" -maxdepth 1 -name '*.iso' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
-[[ -n "$ISO" ]] || { echo "No ISO found in $ISO_DIR/out; run ./build.sh first" >&2; exit 1; }
+# build.sh writes to the project's iso/out; older builds used this script's
+# own out/ directory. Accept either, newest first.
+SRC_DIR="${SESSION_SRC_DIR:-$HOME/Code/cosmalia-session-dinit}"
+ISO="$(find "$SRC_DIR/iso/out" "$ISO_DIR/out" -maxdepth 1 -name '*.iso' \
+    -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+[[ -n "$ISO" ]] || { echo "No ISO found in $SRC_DIR/iso/out or $ISO_DIR/out; run ./build.sh first" >&2; exit 1; }
 
 # Interface names are limited to 15 characters, hence the short name here.
 TAP="tap-cosdinit"

@@ -23,10 +23,10 @@ EOF
 chmod 0644 /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.cosmic.service
 
 # ---------------------------------------------------------------------------
-# pacman works in the live system (signed packages from Artix + Arch extra).
+# pacman works in the live system (signed packages from Artix repos only).
 # ---------------------------------------------------------------------------
 pacman-key --init
-pacman-key --populate artix archlinux
+pacman-key --populate artix
 
 # A build host with a newer libalpm writes a `%INSTALLED_DB%` key into the
 # local package database (e.g. for the two [cosmalia] packages). The Artix

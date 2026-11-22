@@ -8,38 +8,54 @@
 set -euo pipefail
 
 ISO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# This project lives outside the source repo on purpose (no uncommitted files
-# spread through the checkout). Point SESSION_SRC_DIR at the repo; override for
-# CI or a different checkout.
+# Keep the generated packages and the mkarchiso work dir outside the source
+# repo, but put the finished ISO in the project's own (gitignored) iso/out/.
+# Point SESSION_SRC_DIR at the repo; override for CI or a different checkout.
 SRC_DIR="${SESSION_SRC_DIR:-/home/g/Code/cosmalia-session-dinit}"
 [[ -f "$SRC_DIR/PKGBUILD" ]] || {
     echo "SESSION_SRC_DIR does not look like the cosmalia-session-dinit repo: $SRC_DIR" >&2
     exit 1
 }
 SOURCE_PROFILE="$ISO_DIR/profile"
-REPO_DIR="${ISO_REPO_DIR:-$ISO_DIR/local-repo}"
-OUT_DIR="${ISO_OUT_DIR:-$ISO_DIR/out}"
+REPO_DIR="${ISO_REPO_DIR:-/tmp/opencode/cosmalia-session-dinit-iso/local-repo}"
+OUT_DIR="${ISO_OUT_DIR:-$SRC_DIR/iso/out}"
 WORK_DIR="${ISO_WORK_DIR:-/tmp/opencode/cosmalia-artix-dinit-iso-work}"
 # Work on a copy: generated pacman.conf / package list never touch the source.
 PROFILE="$WORK_DIR/profile"
 
-# Guard: all generated files (build work dir, local repo, ISO) must live
-# outside the source checkout. Never leave uncommitted/root-owned files in it.
-for d in "$REPO_DIR" "$OUT_DIR" "$WORK_DIR"; do
+# Guard: packages and mkarchiso scratch must stay outside the source checkout
+# (no root-owned build debris in git). The finished ISO is the one exception:
+# it belongs in "$SRC_DIR/iso/out", which is gitignored.
+SRC_REAL="$(realpath -m -- "$SRC_DIR")"
+ISO_OUT_REAL="$SRC_REAL/iso/out"
+OUT_REAL="$(realpath -m -- "$OUT_DIR")"
+for d in "$REPO_DIR" "$WORK_DIR"; do
     case "$(realpath -m -- "$d")" in
-        "$SRC_DIR"|"$SRC_DIR"/*)
-            echo "Refusing to write generated files inside the source repo: $d" >&2
+        "$SRC_REAL"|"$SRC_REAL"/*)
+            echo "Refusing to write build scratch inside the source repo: $d" >&2
             exit 1
             ;;
     esac
 done
+case "$OUT_REAL" in
+    "$ISO_OUT_REAL"|"$ISO_OUT_REAL"/*) ;;
+    "$SRC_REAL"|"$SRC_REAL"/*)
+        echo "Refusing to write the ISO inside the source repo outside $ISO_OUT_REAL: $OUT_DIR" >&2
+        exit 1
+        ;;
+esac
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 SUDO=(); (( EUID == 0 )) || SUDO=(sudo)
 
-for tool in makepkg repo-add mkarchiso curl; do
+for tool in makepkg repo-add curl; do
     command -v "$tool" >/dev/null || { echo "$tool not found (see README.md)" >&2; exit 1; }
 done
+# mkarchiso is vendored in iso/tools so the build needs no Arch repositories.
+[[ -x "$ISO_DIR/tools/mkarchiso" ]] || {
+    echo "vendored mkarchiso not found: $ISO_DIR/tools/mkarchiso" >&2
+    exit 1
+}
 
 mkdir -p "$REPO_DIR" "$OUT_DIR"
 # mkarchiso uses _run_once markers in the work dir; reuse would silently skip
@@ -102,10 +118,9 @@ rm -f "$REPO_DIR/cosmalia.db.tar.gz" "$REPO_DIR/cosmalia.files.tar.gz"
 repo-add "$REPO_DIR/cosmalia.db.tar.gz" "$REPO_DIR"/*.pkg.tar.zst >/dev/null
 
 # ---------------------------------------------------------------------------
-# 2. Pick a browser. brave-origin is not in the configured repos; Arch [extra]
-#    (enabled in our pacman.conf) has chromium, which is the documented
-#    fallback. A third choice, ungoogled-chromium, is kept for repo setups
-#    where Arch mirrors are unavailable.
+# 2. Pick a browser. Only Artix repos are configured: galaxy ships
+#    ungoogled-chromium and firefox. Noctalia dock pins need the exact
+#    desktop-entry stem, not the human-readable Name.
 # ---------------------------------------------------------------------------
 probe_conf="$WORK_DIR/browser-probe-pacman.conf"
 probe_db="$WORK_DIR/browser-probe-db"
@@ -116,38 +131,28 @@ repo_has() {
     pacman -b "$probe_db" --config "$probe_conf" -Si "$1" >/dev/null 2>&1
 }
 
-log "Probing repositories for a browser package"
+log "Probing Artix repositories for a browser package"
 "${SUDO[@]}" pacman -b "$probe_db" --config "$probe_conf" -Sy --noconfirm >/dev/null 2>&1 || true
 
 BROWSER_PKG=""
 BROWSER_NAME=""
 if [[ -n "${COSMALIA_BROWSER:-}" ]]; then
     BROWSER_PKG="$COSMALIA_BROWSER"
-    case "$BROWSER_PKG" in
-        brave*) BROWSER_NAME="brave-origin" ;;
-        *ungoogled*) BROWSER_NAME="ungoogled-chromium" ;;
-        # Noctalia dock pins use desktop-entry IDs (e.g. chromium.desktop),
-        # not the human-readable Name shown in the launcher menu.
-        *) BROWSER_NAME="chromium" ;;
-    esac
+    BROWSER_NAME="$BROWSER_PKG"
     log "Browser forced by COSMALIA_BROWSER: $BROWSER_PKG"
 else
-    for candidate in brave-origin-bin brave-origin chromium ungoogled-chromium; do
+    for candidate in ungoogled-chromium firefox; do
         if repo_has "$candidate"; then
             BROWSER_PKG="$candidate"
-            case "$candidate" in
-                brave*) BROWSER_NAME="brave-origin" ;;
-                *ungoogled*) BROWSER_NAME="ungoogled-chromium" ;;
-                *) BROWSER_NAME="chromium" ;;
-            esac
+            BROWSER_NAME="$candidate"
             break
         fi
     done
 fi
 
 if [[ -z "$BROWSER_PKG" ]]; then
-    echo "No browser package found. Install one of: chromium, ungoogled-chromium," >&2
-    echo "brave-origin-bin. Set COSMALIA_BROWSER to override the probe." >&2
+    echo "No browser package found in the Artix repositories (tried" >&2
+    echo "ungoogled-chromium, firefox). Set COSMALIA_BROWSER to override." >&2
     exit 1
 fi
 log "Using browser: $BROWSER_PKG (dock entry: $BROWSER_NAME)"
@@ -160,8 +165,7 @@ sed "s|@REPO_DIR@|$REPO_DIR|g" "$SOURCE_PROFILE/pacman.conf" >"$PROFILE/pacman.c
 # The live image uses Include paths, so ship the mirrorlists it references.
 # The directory can be absent in a fresh checkout (git does not track empties).
 mkdir -p "$PROFILE/airootfs/etc/pacman.d"
-cp -f "$SOURCE_PROFILE/mirrorlist-artix" "$SOURCE_PROFILE/mirrorlist-arch" \
-    "$PROFILE/airootfs/etc/pacman.d/"
+cp -f "$SOURCE_PROFILE/mirrorlist-artix" "$PROFILE/airootfs/etc/pacman.d/"
 
 # Dock pin is the chosen browser's desktop name, not its pacman package name.
 sed -i "s|@BROWSER@|$BROWSER_NAME|g" \
@@ -182,9 +186,65 @@ find "$REPO_DIR" -maxdepth 1 -name '*.pkg.tar.zst' -printf '    %f\n' | sort
 # ---------------------------------------------------------------------------
 # 4. Build the ISO.
 # ---------------------------------------------------------------------------
-log "Running mkarchiso (work: $WORK_DIR, output: $OUT_DIR)"
-"${SUDO[@]}" env "PATH=$PATH" mkarchiso -v -w "$WORK_DIR" -o "$OUT_DIR" "$PROFILE"
+log "Running mkarchiso (UEFI: GRUB; work: $WORK_DIR, output: $OUT_DIR)"
+"${SUDO[@]}" env "PATH=$PATH" "$ISO_DIR/tools/mkarchiso" -v -w "$WORK_DIR" -o "$OUT_DIR" "$PROFILE"
+
+# Fail loudly if our initramfs hook is only copied (add_file) instead of
+# registered (add_runscript): in that case run_hook() never runs and both the
+# boot log and the overlay-mount override are silently absent.
+initrd="$(find "$WORK_DIR/iso" -name 'initramfs-linux.img' -print -quit)"
+check_dir="$(mktemp -d)"
+if [[ -z "$initrd" ]] || ! ( cd "$check_dir" && lsinitcpio -x "$initrd" >/dev/null 2>&1 ); then
+    echo "Could not inspect the generated initramfs: $initrd" >&2
+    exit 1
+fi
+for hook in artix artix_loop_mnt cosmalia_bootlog; do
+    grep -q "$hook" "$check_dir/config" || {
+        echo "initramfs hook $hook is not registered (check its install script)" >&2
+        exit 1
+    }
+done
+# The boot-log hook is also the progress beacon for the reported
+# "stuck at squashfs: version 4.0" stall. Guard against an accidentally stale
+# or trimmed copy being shipped in the initramfs.
+grep -q 'mount: start dev=' "$check_dir/hooks/cosmalia_bootlog" || {
+    echo "generated initramfs lacks the cosmalia boot-stage markers" >&2
+    exit 1
+}
+rm -rf "$check_dir"
+log "Verified Artix live hooks and cosmalia_bootlog are registered in the initramfs"
+
+# ---------------------------------------------------------------------------
+# 4b. Verify the handoff after switch_root: /sbin/init must be dinit, and the
+#     launcher + user dinit units from cosmalia-session-dinit must be present.
+#     A broken /sbin/init is indistinguishable from an initramfs hang unless
+#     it is checked here.
+# ---------------------------------------------------------------------------
+live_root="$WORK_DIR/x86_64/airootfs"
+for target in sbin/init usr/bin/init; do
+    resolved="$(readlink "$live_root/$target" 2>/dev/null || true)"
+    [[ "$resolved" == *dinit-init ]] || {
+        echo "$target must point at dinit-init, got '${resolved:-<not a symlink>}'" >&2
+        exit 1
+    }
+done
+for required in usr/bin/cosmalia-session \
+                etc/dinit.d/user/cosmalia-session.target \
+                etc/dinit.d/user/noctalia \
+                etc/dinit.d/user/cosmic-settings-daemon; do
+    [[ -e "$live_root/$required" ]] || {
+        echo "missing $required in the live root (cosmalia-session-dinit not installed?)" >&2
+        exit 1
+    }
+done
+log "Verified /sbin/init -> dinit and cosmalia-session-dinit user units in the live root"
+
+# mkarchiso runs as root, so the ISO would otherwise be root-owned in the
+# checkout. Hand it back to the invoking user (gitignored, see iso/.gitignore).
+if (( EUID != 0 )) && compgen -G "$OUT_DIR/*.iso" >/dev/null; then
+    "${SUDO[@]}" chown "$(id -u):$(id -g)" "$OUT_DIR"/*.iso
+fi
 
 echo
-log "Finished. ISO files:"
+log "Finished. ISO files (in the project, gitignored):"
 ls -lh "$OUT_DIR"/*.iso

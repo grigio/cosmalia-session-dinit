@@ -57,6 +57,17 @@ log="$XDG_RUNTIME_DIR/cosmalia-session.log"
 
 say() { echo "cosmalia: $*" >>"$log"; }
 
+# Escape hatch for real-hardware debugging: boot with "cosmalia.shell=1" on
+# the kernel command line (the ISO ships a GRUB/syslinux entry for it) and
+# this session drops to a text shell instead of starting the compositor.
+# The runtime log then stays readable even when a GPU produces no output.
+case " $(cat /proc/cmdline 2>/dev/null) " in
+    *" cosmalia.shell=1 "*|*" cosmalia.shell "*)
+        say "cosmalia.shell requested: opening a text console instead of the compositor"
+        exec /bin/bash -i
+        ;;
+esac
+
 comp=/usr/bin/cosmic-comp
 noctalia=/usr/bin/noctalia
 settingsd=/usr/bin/cosmic-settings-daemon
@@ -92,10 +103,69 @@ fi
 
 stamp="$XDG_RUNTIME_DIR/.cosmalia-session-start"
 
-"$comp" --no-xwayland >>"$log" 2>&1 &
-comp_pid=$!
+# ---------------------------------------------------------------------------
+# Real hardware vs. the QEMU test rig — the fix for "black screen on AMD/Intel".
+#
+# On real machines this is a live USB, so:
+#   * the GPU driver (i915 / xe / amdgpu) is loaded asynchronously by udev,
+#     and /dev/dri can still be empty when greetd autologins;
+#   * simpledrm is built into the kernel and owns /dev/dri/card0 (the EFI
+#     framebuffer) until the real driver takes over. cosmic-comp would be
+#     happy to drive that card and draw to a screen nobody ever sees.
+# QEMU's QXL/virtio GPU needs no firmware and is present from the start,
+# which is why the old launcher worked there but produced a black screen on
+# physical hardware.
+#
+# Wait briefly for a card with a real driver, and set cosmic-comp's
+# COSMIC_DRM_BLOCK_DEVICES to skip any simpledrm card that is still around.
+# ---------------------------------------------------------------------------
+probe_drm() {
+    real_card=""
+    real_drv=""
+    blocked=""
+    for drm in /sys/class/drm/card[0-9]*; do
+        [ -e "$drm" ] || continue
+        card=${drm##*/}
+        drv=$(readlink -f "$drm/device/driver" 2>/dev/null)
+        drv=${drv##*/}
+        case "$drv" in
+            # simpledrm is a platform driver: the sysfs driver name is
+            # "simple-framebuffer", not "simpledrm". Check both names.
+            simpledrm|simple-framebuffer)
+                # cosmic-comp resolves the blocklist against the render node,
+                # so a bare "cardN" name can silently fail to match. Include
+                # the major:minor from sysfs as well (accepted format).
+                devid=$(cat "$drm/dev" 2>/dev/null)
+                blocked="${blocked:+$blocked,}$card"
+                [ -z "$devid" ] || blocked="$blocked,$devid"
+                ;;
+            '')
+                : ;;  # card exists but has no bound driver yet
+            *)
+                [ -n "$real_card" ] || { real_card=$card; real_drv=$drv; }
+                ;;
+        esac
+    done
+}
 
-: >"$stamp"
+i=0
+while [ "$i" -lt 200 ]; do
+    probe_drm
+    [ -n "$real_card" ] && break
+    i=$((i + 1))
+    sleep 0.1
+done
+if [ -n "$blocked" ]; then
+    export COSMIC_DRM_BLOCK_DEVICES="$blocked"
+    say "ignoring firmware-framebuffer DRM cards: $blocked"
+else
+    unset COSMIC_DRM_BLOCK_DEVICES
+fi
+if [ -n "$real_card" ]; then
+    say "DRM ready: $real_card (${real_drv:-unknown driver}) after $i checks"
+else
+    say "warning: no non-simpledrm card after 20s; trying the compositor anyway"
+fi
 
 # On logout the session scope SIGTERMs this script, and even a plain
 # "kill <script>" should not leave the shell and the portals behind.
@@ -114,27 +184,103 @@ cleanup() {
 }
 trap 'cleanup; [ -n "${comp_pid:-}" ] && kill "$comp_pid" 2>/dev/null; exit 143' TERM INT HUP
 
-# Find the socket cosmic-comp listens on (it picks wayland-N itself): Noctalia
-# and everything it spawns has to be pointed at that one.
-sock=""
-i=0
-while [ "$i" -lt 300 ] && kill -0 "$comp_pid" 2>/dev/null; do
-    if [ -x /usr/bin/ss ]; then
-        sock=$(/usr/bin/ss -xlHp 2>/dev/null |
-            /usr/bin/awk -v p="pid=$comp_pid," 'index($0, p) && $2 == "LISTEN" {print $5; exit}')
+# Wait for the socket the compositor listens on (it picks wayland-N itself):
+# Noctalia and everything it spawns has to be pointed at that one.
+wait_for_socket() {
+    sock=""
+    i=0
+    while [ "$i" -lt 150 ] && kill -0 "$comp_pid" 2>/dev/null; do
+        if [ -x /usr/bin/ss ]; then
+            sock=$(/usr/bin/ss -xlHp 2>/dev/null |
+                /usr/bin/awk -v p="pid=$comp_pid," 'index($0, p) && $2 == "LISTEN" {print $5; exit}')
+        else
+            # no iproute2: newest socket created since the compositor started
+            sock=$(/usr/bin/find "$XDG_RUNTIME_DIR" -maxdepth 1 -name 'wayland-*' -type s \
+                -newer "$stamp" -print -quit 2>/dev/null)
+        fi
+        if [ -n "$sock" ] && [ -S "$sock" ]; then
+            break
+        fi
+        sock=""
+        i=$((i + 1))
+        sleep 0.1
+    done
+    rm -f "$stamp"
+}
+
+# Everything needed to understand a black screen on real hardware, written
+# to the session log so it survives even when there is no working display.
+diagnose_drm() {
+    {
+        echo "--- Cosmalia DRM diagnostics ---"
+        echo "cmdline: $(cat /proc/cmdline 2>/dev/null)"
+        echo "DRM cards:"
+        for drm in /sys/class/drm/card[0-9]*; do
+            [ -e "$drm" ] || continue
+            echo "  ${drm##*/}: driver=$(readlink -f "$drm/device/driver" 2>/dev/null) vendor=$(cat "$drm/device/vendor" 2>/dev/null) device=$(cat "$drm/device/device" 2>/dev/null)"
+        done
+        echo "GPU modules: $(/usr/bin/lsmod 2>/dev/null | /usr/bin/awk '/^(i915|xe|amdgpu|qxl|virtio_gpu|simpledrm|nouveau|radeon)/{printf "%s ",$1}')"
+        if [ -x /usr/bin/lspci ]; then
+            echo "PCI display devices:"
+            /usr/bin/lspci -nnk 2>/dev/null | /usr/bin/grep -A3 -iE 'vga|3d controller|display controller' || true
+        fi
+        echo "kernel DRM messages:"
+        /usr/bin/dmesg 2>/dev/null | /usr/bin/grep -iE 'drm|i915|xe |amdgpu|firmware|simple-framebuffer' | /usr/bin/tail -80 || true
+        echo "sessions:"
+        /usr/bin/loginctl list-sessions --no-legend 2>/dev/null || true
+    } >>"$log" 2>&1
+    save_log_to_usb
+}
+
+# On the live ISO, keep a copy on the USB's FAT partition: if the screen is
+# black, the stick can be moved to another computer and the log read there.
+# No-op on an installed system (no ARCHISO_EFI label).
+save_log_to_usb() {
+    esp=/dev/disk/by-label/ARCHISO_EFI
+    [ -e "$esp" ] || return 0
+    mnt=/tmp/.cosmalia-esplog
+    /usr/bin/sudo -n /bin/mkdir -p "$mnt" 2>/dev/null || return 0
+    /usr/bin/sudo -n /bin/mount -t vfat -o rw,umask=000 "$esp" "$mnt" 2>/dev/null || return 0
+    /usr/bin/sudo -n /bin/cp "$log" "$mnt/SESSIONLOG.TXT" 2>/dev/null || true
+    /usr/bin/sudo -n /bin/umount "$mnt" 2>/dev/null || true
+}
+
+# Start the compositor. A slow GPU driver can make the first attempt fail
+# before /dev/dri is fully populated, so re-probe and retry a couple of times.
+# A compositor that stays alive without opening a socket is killed instead of
+# being retried (retrying would not help a hung DRM backend).
+attempt=1
+comp_status=1
+while [ "$attempt" -le 3 ]; do
+    probe_drm
+    if [ -n "$blocked" ]; then
+        export COSMIC_DRM_BLOCK_DEVICES="$blocked"
     else
-        # no iproute2: newest socket created since the compositor started
-        sock=$(/usr/bin/find "$XDG_RUNTIME_DIR" -maxdepth 1 -name 'wayland-*' -type s \
-            -newer "$stamp" -print -quit 2>/dev/null)
+        unset COSMIC_DRM_BLOCK_DEVICES
     fi
-    if [ -n "$sock" ] && [ -S "$sock" ]; then
+    "$comp" --no-xwayland >>"$log" 2>&1 &
+    comp_pid=$!
+    : >"$stamp"
+
+    wait_for_socket
+    if [ -n "$sock" ]; then
         break
     fi
-    sock=""
-    i=$((i + 1))
-    sleep 0.1
+
+    if kill -0 "$comp_pid" 2>/dev/null; then
+        say "compositor did not open a Wayland socket (attempt $attempt); stopping it"
+        kill "$comp_pid" 2>/dev/null || true
+        wait "$comp_pid" 2>/dev/null || true
+        break
+    fi
+    wait "$comp_pid" 2>/dev/null
+    comp_status=$?
+    say "compositor exited without a socket (attempt $attempt, status $comp_status)"
+    attempt=$((attempt + 1))
+    [ "$attempt" -le 3 ] || break
+    say "re-probing DRM and retrying in 2s"
+    sleep 2
 done
-rm -f "$stamp"
 
 if [ -n "$sock" ]; then
     export WAYLAND_DISPLAY="${sock##*/}"
@@ -200,14 +346,16 @@ if [ -n "$sock" ]; then
         say "  dinitctl --user status cosmalia-session.target"
         say "  dinitctl --user catlog noctalia"
     fi
+    save_log_to_usb
+
+    wait "$comp_pid"
+    status=$?
 else
     say "compositor socket not found, not starting Noctalia"
-    # Compositor may have died; wait will reap it and exit with its status
+    diagnose_drm
+    status=${comp_status:-1}
 fi
 
-wait "$comp_pid"
-status=$?
 say "compositor exited with status $status"
-
 cleanup
 exit "$status"

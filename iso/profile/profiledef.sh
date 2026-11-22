@@ -8,11 +8,15 @@ iso_publisher="Cosmalia <https://github.com/grigio/cosmalia-session-dinit>"
 iso_application="Cosmalia Live (Artix Linux / dinit)"
 iso_version="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 install_dir="cosmalia"
+# Artix's official live ISOs use GRUB (UEFI) + syslinux (BIOS).
 bootmodes=('bios.syslinux' 'uefi.grub')
 arch="x86_64"
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
-airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-b' '1M')
+# zstd 15 made a ~1.4 GB image but was slow to write/read. Level 3 is much
+# faster to compress and decompress; the image grows but still fits a 2 GB+
+# USB stick, and boot from real hardware is noticeably quicker.
+airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '3' '-b' '1M')
 file_permissions=(
   ["/etc/shadow"]="0:0:400"
   ["/etc/gshadow"]="0:0:400"

@@ -47,6 +47,7 @@ Installing the package **does not** change the greeter default. Cosmalia is inst
 | `/usr/share/xdg-desktop-portal/cosmalia-portals.conf` | Portal selection: cosmic for FileChooser/settings/access/remote desktop, wlr for ScreenCast/Screenshot (OBS), GTK fallback |
 | `/etc/xdg/xdg-desktop-portal-wlr/cosmalia` | Screen capture without the broken interactive picker: captures `eDP-1` directly |
 | `/etc/udev/rules.d/99-cosmalia-backlight.rules` | Backlight sysfs write access for the `video` group (brightness control) |
+| `/etc/udev/rules.d/99-cosmalia-drm.rules` | Fallback `/dev/dri/*` access for the `video` group until elogind registers a seat |
 | `/usr/share/polkit-1/rules.d/cosmalia-session.rules` | Polkit policy so local admins can change Wi-Fi networks |
 | `/etc/dinit.d/user/cosmalia-session.target` | Session target (internal), `depends-ms` on session services |
 | `/etc/dinit.d/user/noctalia` | Noctalia service: `restart=on-failure`, `after: cosmic-settings-daemon` |
@@ -205,6 +206,7 @@ The launcher/compositor log is truncated each login. Services log via dinit's lo
 | No "Screen Capture (PipeWire)" source in OBS | `pacman -Q xdg-desktop-portal-wlr`, check `cosmalia-portals.conf` has `ScreenCast=wlr`, then restart xdg-desktop-portal and OBS. The cosmic backend crashes on `ext_image_copy_capture_session_v1`, so wlr must serve ScreenCast. |
 | Screen capture selector is cancelled immediately | cosmic-comp's interactive capture picker does not work with xdg-desktop-portal-wlr. The shipped `/etc/xdg/xdg-desktop-portal-wlr/cosmalia` sets `chooser_type=none` and `output_name=eDP-1`, so capture starts without a picker. Change `output_name` if your display is not `eDP-1` (see `wayland-info`). |
 | File dialogs wrong/missing | `pacman -Q xdg-desktop-portal-cosmic xdg-desktop-portal-gtk`, `XDG_CURRENT_DESKTOP=cosmalia:COSMIC /usr/lib/xdg-desktop-portal -v -r`, check `cosmalia-portals.conf` exists. A user config in `~/.config/xdg-desktop-portal/` overrides it. |
+| Black screen on real AMD/Intel hardware (live ISO) | Boot "Cosmalia Live (boot debug)" or "(text console)" and read `/run/user/1000/cosmalia-session.log`; on the live ISO the launcher also copies it to `SESSIONLOG.TXT` on the USB's FAT partition, where the initramfs writes `BOOTLOG.TXT`. The launcher waits for a real DRM card and skips `simpledrm` cards via `COSMIC_DRM_BLOCK_DEVICES`. See `iso/README.md`. |
 | "Failed to open service channel Wayland connection" | Expected and harmless (no Mutter service channel under cosmic-comp). |
 | Traffic-light decorations missing | Ensure `cosmic-comp` package is installed (provides them). |
 | Greeter doesn't default to Cosmalia | Intentional on install. Run `sudo cosmalia-session-default` or pick it once (Noctalia Greeter remembers). |
@@ -233,7 +235,8 @@ sudo rm /usr/share/wayland-sessions/cosmalia.desktop \
         /usr/share/doc/cosmalia-session-dinit/README.md \
         /usr/share/licenses/cosmalia-session-dinit/LICENSE \
         /usr/share/polkit-1/rules.d/cosmalia-session.rules \
-        /etc/udev/rules.d/99-cosmalia-backlight.rules
+        /etc/udev/rules.d/99-cosmalia-backlight.rules \
+        /etc/udev/rules.d/99-cosmalia-drm.rules
 # `reload` needs a service name in this dinit version; new services are
 # discovered on demand, so this is only needed if they are still loaded.
 dinitctl --user reload cosmalia-session.target 2>/dev/null || true
