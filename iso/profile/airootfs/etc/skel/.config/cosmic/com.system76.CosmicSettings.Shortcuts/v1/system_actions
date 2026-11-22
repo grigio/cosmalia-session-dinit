@@ -1,0 +1,4 @@
+{
+    // Screenshots are handled by the Print shortcut (grim | satty).
+    // Alt+Tab is handled in-process by cosmic-comp-traffic.
+}

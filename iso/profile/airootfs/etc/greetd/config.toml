@@ -1,0 +1,14 @@
+# greetd with the *textual* tuigreet greeter (runs directly on the VT, no
+# cage, no GTK).  The live image autologins into Cosmalia through
+# initial_session; logging out drops back to this TUI greeter with liveuser
+# pre-filled and Cosmalia as the only command.
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --cmd /usr/bin/cosmalia-session --issue --time --user liveuser --remember-session"
+user = "greeter"
+
+[initial_session]
+command = "/usr/bin/cosmalia-session"
+user = "liveuser"

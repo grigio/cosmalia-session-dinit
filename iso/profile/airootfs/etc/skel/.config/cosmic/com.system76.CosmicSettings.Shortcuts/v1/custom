@@ -1,0 +1,65 @@
+// Shortcuts ported from ~/.config/labwc/rc.xml (labwc -> cosmic-comp).
+// custom is merged over /usr/share/cosmic/com.system76.CosmicSettings.Shortcuts/v1/defaults,
+// so every entry here replaces the stock binding on the same modifiers+key.
+// Actions that were shell commands in labwc use Spawn(...), which cosmic-comp runs
+// through `/bin/sh -c`, so pipelines and $() work as-is.
+{
+    // ── Audio: same wpctl 5% steps as rc.xml ──────────────────────────────
+    (modifiers: [], key: "XF86AudioLowerVolume"): Spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),
+    (modifiers: [], key: "XF86AudioRaiseVolume"): Spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"),
+    (modifiers: [], key: "XF86AudioMute"): Spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
+    (modifiers: [], key: "XF86AudioPlay"): Spawn("playerctl play-pause"),
+    (modifiers: [], key: "XF86AudioPause"): Spawn("playerctl play-pause"),
+
+    // ── Brightness: finer 3% step, as in rc.xml ───────────────────────────
+    (modifiers: [], key: "XF86MonBrightnessUp"): Spawn("brightnessctl set 3%+"),
+    (modifiers: [], key: "XF86MonBrightnessDown"): Spawn("brightnessctl set 3%-"),
+
+    // ── Windows: W-Up/W-Down toggle maximize, W-w close ───────────────────
+    // (overrides stock Super+Up/Down = Focus(Up/Down); Super+hjkl still focuses)
+    (modifiers: [Super], key: "Up"): Maximize,
+    (modifiers: [Super], key: "Down"): Maximize,
+    (modifiers: [Super], key: "w"): Close,
+
+    // ── Windows: Super+Left/Right move the window into the left/right slot ─
+    // cosmic-comp has no "tile to half" action, so this is the nearest thing:
+    // Move(Direction) reorders the focused window inside a tiling group (with
+    // two tiled windows it swaps the halves). Overrides stock Focus(Left/Right);
+    // focus still works on Super+h/l. At the edge of a group cosmic-comp falls
+    // back to moving the window to the previous/next workspace.
+    (modifiers: [Super], key: "Left"): Move(Left),
+    (modifiers: [Super], key: "Right"): Move(Right),
+
+    // ── Workspaces ────────────────────────────────────────────────────────
+    // Left/Right only fire while workspace_layout is Horizontal (see
+    // com.system76.CosmicComp/v1/workspaces); labwc's SendToDesktop with
+    // follow=yes maps to MoveTo{Next,Previous}Workspace, which follows the window.
+    (modifiers: [Super, Shift], key: "Right"): MoveToNextWorkspace,
+    (modifiers: [Super, Shift], key: "Left"): MoveToPreviousWorkspace,
+    (modifiers: [Super, Ctrl], key: "Left"): PreviousWorkspace,
+    (modifiers: [Super, Ctrl], key: "Right"): NextWorkspace,
+    (modifiers: [Super], key: "1"): Workspace(1),
+    (modifiers: [Super], key: "2"): Workspace(2),
+    (modifiers: [Super], key: "3"): Workspace(3),
+    (modifiers: [Super], key: "4"): Workspace(4),
+
+    // ── Launcher / session: noctalia is the shell on this session ─────────
+    (modifiers: [Super], key: "space"): Spawn("noctalia msg panel-toggle launcher"),
+    (modifiers: [Super, Shift], key: "w"): Spawn("noctalia msg panel-toggle session"),
+    (modifiers: [Super], key: "Escape"): Spawn("noctalia msg session lock-and-suspend"),
+    (modifiers: [], key: "XF86PowerOff"): Spawn("noctalia msg session lock-and-suspend"),
+
+    // ── Terminal ──────────────────────────────────────────────────────────
+    (modifiers: [Super], key: "Return"): Spawn("alacritty"),
+
+    // ── Screenshot: 5s delay -> region -> satty -> clipboard ──────────────
+    (modifiers: [], key: "Print"): Spawn("sleep 5 && sh -c 'grim -g \"$(slurp)\" - | satty --filename - --actions-on-enter save-to-clipboard'"),
+
+    // ── OBS scenes / recording ────────────────────────────────────────────
+    (modifiers: [Alt], key: "1"): Spawn("obs-cmd scene switch fullin"),
+    (modifiers: [Alt], key: "2"): Spawn("obs-cmd scene switch @promo"),
+    (modifiers: [Alt], key: "3"): Spawn("obs-cmd scene switch @desk-cam"),
+    (modifiers: [Alt], key: "5"): Spawn("obs-cmd scene switch @techo-academy"),
+    (modifiers: [Alt], key: "e"): Spawn("obs-cmd scene switch @outro"),
+    (modifiers: [Alt], key: "r"): Spawn("obs-cmd recording toggle"),
+}

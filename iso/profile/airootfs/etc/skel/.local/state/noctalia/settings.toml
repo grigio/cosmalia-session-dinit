@@ -1,0 +1,110 @@
+# Sanitised Noctalia defaults for the live ISO.
+# @BROWSER@ is replaced by build.sh with the browser actually shipped
+# (brave-origin, or chromium when brave-origin is not in the repositories).
+config_version = 20
+
+[backdrop]
+blur_intensity = 0.5
+enabled = true
+
+[bar.default]
+background_opacity = 0.85
+compositor_blur = true
+end = [
+    "tray",
+    "network",
+    "bluetooth",
+    "volume",
+    "battery",
+    "control-center",
+    "theme_mode",
+    "clock",
+    "session"
+]
+position = "bottom"
+reserve_space = false
+start = [ "launcher", "workspaces" ]
+thickness = 37
+
+[brightness]
+minimum_brightness = 0.01
+
+[dock]
+cross_axis_padding = 1
+enabled = true
+icon_size = 32
+pinned = [ "Alacritty", "@BROWSER@", "octopi", "com.system76.CosmicSettings" ]
+reserve_space = false
+show_dots = true
+
+[idle]
+behavior_order = [ "screen-off" ]
+
+    [idle.behavior.screen-off]
+    action = "screen_off"
+    enabled = true
+    timeout = 900.0
+
+[lockscreen]
+blur_intensity = 0.5
+
+[nightlight]
+enabled = false
+
+[shell]
+polkit_agent = true
+
+    [shell.panel]
+    transparency_mode = "glass"
+
+    [[shell.session.actions]]
+    action = "lock"
+    countdown_seconds = 0.0
+    enabled = true
+    shortcut = "1"
+    variant = "default"
+
+    [[shell.session.actions]]
+    action = "logout"
+    countdown_seconds = 0.0
+    enabled = true
+    shortcut = "3"
+    variant = "default"
+
+    [[shell.session.actions]]
+    action = "reboot"
+    countdown_seconds = 0.0
+    enabled = true
+    shortcut = "4"
+    variant = "default"
+
+    [[shell.session.actions]]
+    action = "shutdown"
+    countdown_seconds = 0.0
+    enabled = true
+    shortcut = "5"
+    variant = "destructive"
+
+[theme]
+builtin = "Gruvbox"
+mode = "dark"
+source = "wallpaper"
+wallpaper_scheme = "m3-content"
+
+[wallpaper.default]
+path = "/usr/share/backgrounds/cosmalia-wallpaper.png"
+
+[wallpaper.last]
+path = "/usr/share/backgrounds/cosmalia-wallpaper.png"
+
+[widget.brightness]
+show_label = false
+
+[widget.network]
+show_label = false
+
+[widget.volume]
+show_label = false
+
+[widget.workspaces]
+show_labels = false

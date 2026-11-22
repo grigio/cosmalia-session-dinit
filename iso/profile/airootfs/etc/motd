@@ -1,0 +1,11 @@
+Cosmalia Live — Artix Linux (dinit)
+===================================
+
+Minimal COSMIC desktop: cosmic-comp + Noctalia, supervised by dinit.
+You are logged in as 'liveuser' on vt1 (greetd autologin).
+Logging out returns to greetd with a textual tuigreet prompt.
+
+Root shell:           sudo -i
+Session log:          cat "$XDG_RUNTIME_DIR/cosmalia-session.log"
+Shell log:            dinitctl --user catlog noctalia
+Boot/services:        dinitctl list

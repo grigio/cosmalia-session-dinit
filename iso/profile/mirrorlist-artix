@@ -1,0 +1,12 @@
+##
+## Artix Linux repository mirrorlist (system / world / galaxy)
+##
+## $repo and $arch are substituted by pacman. The first working mirror wins.
+##
+
+Server = https://mirrors.dotsrc.org/artix-linux/repos/$repo/os/$arch
+Server = https://mirror.clarkson.edu/artix-linux/repos/$repo/os/$arch
+Server = https://mirror1.artixlinux.org/repos/$repo/os/$arch
+Server = https://ftp.halifax.rwth-aachen.de/artixlinux/$repo/os/$arch
+Server = https://mirror.netcologne.de/artix-linux/$repo/os/$arch
+Server = https://artix.wheaton.edu/repos/$repo/os/$arch

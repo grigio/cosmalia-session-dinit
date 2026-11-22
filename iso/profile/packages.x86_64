@@ -1,0 +1,83 @@
+# --- bootstrap -------------------------------------------------------------
+base
+
+# --- Artix kernel, initramfs and keyrings ----------------------------------
+linux
+linux-firmware
+intel-ucode
+amd-ucode
+mkinitcpio
+# archiso mkinitcpio hooks (Arch [extra], Artix ships its own artix hooks).
+mkinitcpio-archiso
+artix-keyring
+archlinux-keyring
+syslinux
+
+# --- dinit userspace (Artix [system] / [world]) ----------------------------
+dinit
+dinit-base
+dinit-rc
+userspawn-dinit
+elogind-dinit
+dbus-dinit
+dbus-dinit-user
+
+# --- login manager: greetd + TUI greeter (no cage / no GTK) ----------------
+greetd
+greetd-dinit
+greetd-tuigreet
+
+# --- Cosmalia session (local [cosmalia] repo, built by ../build.sh) --------
+cosmalia-session-dinit
+# cosmalia-portals.conf pins FileChooser to the cosmic backend; disable its
+# D-Bus activation in customize_airootfs.sh (screenshots use the wlr backend).
+xdg-desktop-portal-cosmic
+
+# --- desktop ---------------------------------------------------------------
+# cosmic-comp-traffic (pinned release, local repo) is appended by build.sh;
+# it provides/replaces cosmic-comp.
+noctalia
+cosmic-settings
+cosmic-settings-daemon
+cosmic-icon-theme
+alacritty
+# Arch chromium needs libsimdutf.so.37; Artix [world] only ships .so.36, so
+# pin this one library from Arch [extra] (satisfies chromium's `simdutf` dep).
+extra/simdutf
+
+# browser line (brave-origin or chromium) is appended by build.sh
+
+# --- tools used by the copied cosmic-comp shortcuts ------------------------
+playerctl
+brightnessctl
+grim
+slurp
+satty
+
+# --- portals / desktop integration -----------------------------------------
+xdg-desktop-portal
+xdg-desktop-portal-wlr
+xdg-desktop-portal-gtk
+polkit
+gnome-keyring
+dbus
+pipewire
+wireplumber
+pipewire-dinit
+pipewire-pulse-dinit
+wireplumber-dinit
+
+# --- small userspace that makes the live session usable --------------------
+adwaita-icon-theme
+ttf-dejavu
+networkmanager
+networkmanager-dinit
+wpa_supplicant
+wpa_supplicant-dinit
+sudo
+iproute2
+inotify-tools
+htop
+octopi
+qemu-guest-agent
+qemu-guest-agent-dinit
