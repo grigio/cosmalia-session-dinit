@@ -47,6 +47,9 @@ jobs:
           [extra]
           Include = /etc/pacman.d/mirrorlist-arch
           EOF
+          # The Artix container does not trust Arch signing keys; build tools
+          # come over HTTPS. The ISO itself still verifies packages.
+          sed -i 's|^SigLevel.*|SigLevel = Optional TrustAll|' /etc/pacman.conf
           pacman -Syu --noconfirm --needed --disable-download-timeout \
             git github-cli sudo curl mkinitcpio squashfs-tools grub syslinux \
             dosfstools mtools libisoburn shellcheck extra/archiso
