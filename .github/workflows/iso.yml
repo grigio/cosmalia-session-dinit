@@ -40,7 +40,7 @@ jobs:
           sed -i 's|^SigLevel.*|SigLevel = Optional TrustAll|' /etc/pacman.conf
           pacman -Syu --noconfirm --needed --disable-download-timeout \
             git github-cli sudo curl mkinitcpio squashfs-tools grub syslinux \
-            dosfstools mtools libisoburn shellcheck
+            dosfstools mtools libisoburn shellcheck artools-base
 
       - name: Checkout (with tags for pkgver/pkgrel)
         uses: actions/checkout@v6

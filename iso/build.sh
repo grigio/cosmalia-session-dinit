@@ -51,9 +51,14 @@ SUDO=(); (( EUID == 0 )) || SUDO=(sudo)
 for tool in makepkg repo-add curl; do
     command -v "$tool" >/dev/null || { echo "$tool not found (see README.md)" >&2; exit 1; }
 done
-# mkarchiso is vendored in iso/tools so the build needs no Arch repositories.
+# mkarchiso is vendored in iso/tools so the build needs no Arch repository.
+# The strap tool is basestrap on Artix (artools-base) or pacstrap elsewhere.
 [[ -x "$ISO_DIR/tools/mkarchiso" ]] || {
     echo "vendored mkarchiso not found: $ISO_DIR/tools/mkarchiso" >&2
+    exit 1
+}
+command -v basestrap >/dev/null 2>&1 || command -v pacstrap >/dev/null 2>&1 || {
+    echo "neither basestrap nor pacstrap found (install artools-base on Artix)" >&2
     exit 1
 }
 
@@ -139,12 +144,16 @@ BROWSER_NAME=""
 if [[ -n "${COSMALIA_BROWSER:-}" ]]; then
     BROWSER_PKG="$COSMALIA_BROWSER"
     BROWSER_NAME="$BROWSER_PKG"
-    log "Browser forced by COSMALIA_BROWSER: $BROWSER_PKG"
+    [[ "$BROWSER_PKG" == ungoogled-chromium ]] && BROWSER_NAME="chromium"
+    log "Browser forced by COSMALIA_BROWSER: $BROWSER_PKG (dock: $BROWSER_NAME)"
 else
     for candidate in ungoogled-chromium firefox; do
         if repo_has "$candidate"; then
             BROWSER_PKG="$candidate"
+            # Artix ungoogled-chromium ships chromium.desktop (Exec=chromium),
+            # not ungoogled-chromium.desktop. Noctalia pins the desktop stem.
             BROWSER_NAME="$candidate"
+            [[ "$candidate" == ungoogled-chromium ]] && BROWSER_NAME="chromium"
             break
         fi
     done
@@ -187,7 +196,7 @@ find "$REPO_DIR" -maxdepth 1 -name '*.pkg.tar.zst' -printf '    %f\n' | sort
 # 4. Build the ISO.
 # ---------------------------------------------------------------------------
 log "Running mkarchiso (UEFI: GRUB; work: $WORK_DIR, output: $OUT_DIR)"
-"${SUDO[@]}" env "PATH=$PATH" "$ISO_DIR/tools/mkarchiso" -v -w "$WORK_DIR" -o "$OUT_DIR" "$PROFILE"
+"${SUDO[@]}" env "PATH=$ISO_DIR/tools:$PATH" "$ISO_DIR/tools/mkarchiso" -v -w "$WORK_DIR" -o "$OUT_DIR" "$PROFILE"
 
 # Fail loudly if our initramfs hook is only copied (add_file) instead of
 # registered (add_runscript): in that case run_hook() never runs and both the

@@ -347,6 +347,10 @@ _make_custom_airootfs() {
 # Install desired packages to the root file system
 _make_packages() {
     local -a _pacstrap_options
+    # Artix provides basestrap (artools-base); Arch hosts provide pacstrap.
+    # Both accept the same options, so prefer the Artix tool.
+    local _strap_cmd=pacstrap
+    command -v basestrap >/dev/null 2>&1 && _strap_cmd=basestrap
 
     _pacstrap_options=(-C "${work_dir}/${buildmode}.pacman.conf" -c -G -M -- "${pacstrap_dir}" "${buildmode_pkg_list[@]}")
     if (( EUID != 0 )); then
@@ -370,9 +374,9 @@ _make_packages() {
 
     # Unset TMPDIR to work around https://bugs.archlinux.org/task/70580
     if [[ "${quiet}" = "y" ]]; then
-        env -u TMPDIR pacstrap "${_pacstrap_options[@]}" >/dev/null
+        env -u TMPDIR "$_strap_cmd" "${_pacstrap_options[@]}" >/dev/null
     else
-        env -u TMPDIR pacstrap "${_pacstrap_options[@]}"
+        env -u TMPDIR "$_strap_cmd" "${_pacstrap_options[@]}"
     fi
 
     if [[ -v cert_list[0] ]]; then
