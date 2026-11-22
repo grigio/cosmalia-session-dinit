@@ -2,7 +2,7 @@
 
 ![Cosmalia Desktop](./cosmalia-session-dinit.png)
 
-**Cosmalia** is a minimal Wayland desktop running in under 0.8 GB RAM, built from:
+**Cosmalia** is a minimal Wayland desktop built from:
 
 - **cosmic-comp-traffic** - COSMIC Wayland compositor (traffic-light decorations, blur, animations, 3-finger swipes, in-process Alt+Tab)
 - **Noctalia** - Shell: bar, dock, launcher, notifications, lock screen, idle/suspend, MPRIS, polkit agent
@@ -65,8 +65,9 @@ the note at the top if you would rather use the systemd / x86-64-v3 build.
 **Recommended: package (pacman owns `/usr`)**
 
 ```sh
-# From GitHub release
-gh release download v1.2.3 -R grigio/cosmalia-session -p '*.pkg.tar.zst*' -D /tmp/cosmalia
+# From the latest release of this repository
+gh release download --repo grigio/cosmalia-session-dinit \
+  -p 'cosmalia-session-dinit-*.pkg.tar.zst*' -D /tmp/cosmalia
 cd /tmp/cosmalia && sha256sum -c ./*.pkg.tar.zst.sha256
 sudo pacman -U ./*.pkg.tar.zst
 
@@ -86,10 +87,10 @@ The package is version-less in the source tree: `pkgver` and `pkgrel` are comput
 makepkg -f
 
 # Override version/release explicitly (e.g. for testing or CI)
-SESSION_VERSION=1.2.3 SESSION_PKGREL=1 makepkg -f
+SESSION_VERSION=1.5.2 SESSION_PKGREL=1 makepkg -f
 
 # Install the resulting package
-sudo pacman -U cosmalia-session-<pkgver>-<pkgrel>-any.pkg.tar.zst
+sudo pacman -U cosmalia-session-dinit-<pkgver>-<pkgrel>-any.pkg.tar.zst
 ```
 
 The package uses `--nodeps` in CI because `cosmic-comp` is in the official repositories while other dependencies (noctalia, cosmic-settings, etc.) are not present in the build container. On a real system with all deps installed, `makepkg -fi` works without `--nodeps`.
@@ -111,6 +112,29 @@ sudo cosmalia-session-default --list
 
 ---
 
+## Live ISO
+
+A ready-to-boot Artix/dinit live image is attached to every `v*` release tag
+(current: **v1.5.2**). It contains only Artix packages and boots with dinit →
+greetd/tuigreet → `cosmalia-session-dinit`. GRUB/syslinux offer two entries:
+the normal boot and a safe `copytoram=y` fallback for USB sticks that stall.
+Neither registers a serial console, which avoids hangs on bare-metal machines
+without a working COM1.
+
+```sh
+gh release download v1.5.2 -R grigio/cosmalia-session-dinit -p '*.iso' -D /tmp/cosmalia-iso
+# Replace /dev/sda with your stick; check with lsblk first.
+sudo dd if=/tmp/cosmalia-iso/cosmalia-artix-dinit-*.iso of=/dev/sda \
+     bs=1M status=progress conv=nocreat oflag=direct
+sudo sync
+```
+
+The initramfs writes boot-stage markers to the console and to `BOOTLOG.TXT` on
+the USB's `ARCHISO_EFI` partition, so a stall right after
+`squashfs: version 4.0` can be attributed. See `iso/README.md` for details.
+
+---
+
 ## What Runs
 
 Started by the session (and supervised by dinit):
@@ -124,7 +148,7 @@ Started by the session (and supervised by dinit):
 
 Already covered (no session entry needed):
 
-- `dbus-broker` (user bus), `pipewire`/`wireplumber` (audio), `gnome-keyring-daemon` (Secret Service, PAM-unlocked at login), `gvfs-*`/`xdg-document-portal` (D-Bus activated), `upower`/`power-profiles-daemon`/`NetworkManager` (system services)
+- `dbus-daemon` (user bus), `pipewire`/`wireplumber` (audio), `gnome-keyring-daemon` (Secret Service, PAM-unlocked at login), `gvfs-*`/`xdg-document-portal` (D-Bus activated), `upower`/`power-profiles-daemon`/`NetworkManager` (system services)
 
 **Environment:** `XDG_CURRENT_DESKTOP=cosmalia:COSMIC`. The `:COSMIC` suffix selects the cosmic portal backend, while putting `cosmalia` first makes `cosmalia-portals.conf` win.
 
@@ -169,15 +193,17 @@ Already covered (no session entry needed):
 ```
 $ dinitctl --user list
 [[+]     ] boot
-[{+}     ] system
-[{+}     ] dbus (pid: 739)
-[[+]     ] login.target
-[{+}     ] graphical.monitor (pid: 740)
-[{+}     ] graphical.target
+[{+}     ] dbus
+[{+}     ] pipewire
+[{+}     ] pipewire-pulse
+[{+}     ] wireplumber
 [[+]     ] cosmalia-session.target
-[{+}     ] noctalia (pid: 790)
-[{+}     ] cosmic-settings-daemon (pid: 789)
+[{+}     ] noctalia
+[{+}     ] cosmic-settings-daemon
 ```
+
+The system manager runs `boot` → `system` → `login.target`, with `greetd`,
+`dbus`, `NetworkManager` and a serial getty enabled in `/etc/dinit.d/boot.d/`.
 
 The session target (`cosmalia-session.target`) is an `internal` type with `depends-ms` on `noctalia` and `cosmic-settings-daemon`. Services do **not** depend back on the target: dinit would reject the cycle. Stopping the target stops the services automatically.
 
@@ -206,7 +232,7 @@ The launcher/compositor log is truncated each login. Services log via dinit's lo
 | No "Screen Capture (PipeWire)" source in OBS | `pacman -Q xdg-desktop-portal-wlr`, check `cosmalia-portals.conf` has `ScreenCast=wlr`, then restart xdg-desktop-portal and OBS. The cosmic backend crashes on `ext_image_copy_capture_session_v1`, so wlr must serve ScreenCast. |
 | Screen capture selector is cancelled immediately | cosmic-comp's interactive capture picker does not work with xdg-desktop-portal-wlr. The shipped `/etc/xdg/xdg-desktop-portal-wlr/cosmalia` sets `chooser_type=none` and `output_name=eDP-1`, so capture starts without a picker. Change `output_name` if your display is not `eDP-1` (see `wayland-info`). |
 | File dialogs wrong/missing | `pacman -Q xdg-desktop-portal-cosmic xdg-desktop-portal-gtk`, `XDG_CURRENT_DESKTOP=cosmalia:COSMIC /usr/lib/xdg-desktop-portal -v -r`, check `cosmalia-portals.conf` exists. A user config in `~/.config/xdg-desktop-portal/` overrides it. |
-| Black screen on real AMD/Intel hardware (live ISO) | Boot "Cosmalia Live (boot debug)" or "(text console)" and read `/run/user/1000/cosmalia-session.log`; on the live ISO the launcher also copies it to `SESSIONLOG.TXT` on the USB's FAT partition, where the initramfs writes `BOOTLOG.TXT`. The launcher waits for a real DRM card and skips `simpledrm` cards via `COSMIC_DRM_BLOCK_DEVICES`. See `iso/README.md`. |
+| Black screen on real AMD/Intel hardware (live ISO) | Read `/run/user/1000/cosmalia-session.log`; on the live ISO the launcher copies it to `SESSIONLOG.TXT` on the USB's FAT partition, where the initramfs also writes `BOOTLOG.TXT`. The launcher waits for a real DRM card and skips `simpledrm` cards via `COSMIC_DRM_BLOCK_DEVICES`. If boot stalls earlier, the last `cosmalia:` console marker identifies the stage; see `iso/README.md`. |
 | "Failed to open service channel Wayland connection" | Expected and harmless (no Mutter service channel under cosmic-comp). |
 | Traffic-light decorations missing | Ensure `cosmic-comp` package is installed (provides them). |
 | Greeter doesn't default to Cosmalia | Intentional on install. Run `sudo cosmalia-session-default` or pick it once (Noctalia Greeter remembers). |
