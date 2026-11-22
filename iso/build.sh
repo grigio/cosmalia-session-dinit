@@ -156,6 +156,8 @@ log "Using browser: $BROWSER_PKG (dock entry: $BROWSER_NAME)"
 sed "s|@REPO_DIR@|$REPO_DIR|g" "$SOURCE_PROFILE/pacman.conf" >"$PROFILE/pacman.conf"
 
 # The live image uses Include paths, so ship the mirrorlists it references.
+# The directory can be absent in a fresh checkout (git does not track empties).
+mkdir -p "$PROFILE/airootfs/etc/pacman.d"
 cp -f "$SOURCE_PROFILE/mirrorlist-artix" "$SOURCE_PROFILE/mirrorlist-arch" \
     "$PROFILE/airootfs/etc/pacman.d/"
 
