@@ -33,7 +33,7 @@ minimum_brightness = 0.01
 cross_axis_padding = 1
 enabled = true
 icon_size = 32
-pinned = [ "Alacritty", "@BROWSER@", "octopi", "com.system76.CosmicSettings" ]
+pinned = [ "alacritty", "@BROWSER@", "octopi", "com.system76.CosmicSettings" ]
 reserve_space = false
 show_dots = true
 

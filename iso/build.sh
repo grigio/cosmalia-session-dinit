@@ -126,7 +126,9 @@ if [[ -n "${COSMALIA_BROWSER:-}" ]]; then
     case "$BROWSER_PKG" in
         brave*) BROWSER_NAME="brave-origin" ;;
         *ungoogled*) BROWSER_NAME="ungoogled-chromium" ;;
-        *) BROWSER_NAME="Chromium" ;;
+        # Noctalia dock pins use desktop-entry IDs (e.g. chromium.desktop),
+        # not the human-readable Name shown in the launcher menu.
+        *) BROWSER_NAME="chromium" ;;
     esac
     log "Browser forced by COSMALIA_BROWSER: $BROWSER_PKG"
 else
