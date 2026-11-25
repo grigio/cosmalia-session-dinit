@@ -82,27 +82,29 @@ log "Building cosmalia-session-dinit package from $SRC_DIR"
 )
 
 # ---------------------------------------------------------------------------
-# 1b. cosmic-comp-traffic from the pinned upstream release. Its .PKGINFO
-#     declares `systemd-libs`, which Artix does not ship. The compositor binary
-#     has no direct libsystemd dependency (only libseat, which Artix links
-#     against libelogind), so rewrite that single dependency before adding the
-#     package to the local repository. Set COSMIC_COMP_PKG to use a local copy.
+# 1b. cosmic-comp-traffic from the pinned upstream release (epoch-1.12.0).
+#     Older builds declared `systemd-libs`, which Artix does not ship; the
+#     rewrite below is a no-op for the pinned release but is kept as a safety
+#     net. The compositor binary has no direct libsystemd dependency (only
+#     libseat, which Artix links against libelogind). Set COSMIC_COMP_PKG to
+#     use a local copy.
 # ---------------------------------------------------------------------------
+COMP_TAG="${COSMIC_COMP_TAG:-epoch-1.12.0}"
 COMP_ASSET="${COSMIC_COMP_PKG:-}"
 COMP_DIR="$ISO_DIR/packages"
 mkdir -p "$COMP_DIR"
 if [[ -n "$COMP_ASSET" ]]; then
     [[ -f "$COMP_ASSET" ]] || { echo "COSMIC_COMP_PKG does not exist: $COMP_ASSET" >&2; exit 1; }
 else
-    COMP_ASSET="$COMP_DIR/cosmic-comp-traffic-1.12.0.rc1-32-x86_64.pkg.tar.zst"
+    COMP_ASSET="$COMP_DIR/cosmic-comp-traffic-1.12.0-39-x86_64.pkg.tar.zst"
     if [[ ! -f "$COMP_ASSET" ]]; then
-        log "Downloading cosmic-comp-traffic (${COSMIC_COMP_TAG:-epoch-1.12.0-rc.1})"
+        log "Downloading cosmic-comp-traffic ($COMP_TAG)"
         curl -fsSL --max-time 300 -o "$COMP_ASSET" \
-            "https://github.com/grigio/cosmic-comp-traffic/releases/download/${COSMIC_COMP_TAG:-epoch-1.12.0-rc.1}/$(basename "$COMP_ASSET")"
+            "https://github.com/grigio/cosmic-comp-traffic/releases/download/$COMP_TAG/$(basename "$COMP_ASSET")"
     fi
 fi
 
-log "Repacking $(basename "$COMP_ASSET") with libelogind instead of systemd-libs"
+log "Repacking $(basename "$COMP_ASSET") for the local [cosmalia] repository"
 comp_extract="$WORK_DIR/cosmic-comp-traffic"
 mkdir -p "$comp_extract"
 tar -xf "$COMP_ASSET" -C "$comp_extract"

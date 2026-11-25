@@ -107,4 +107,5 @@ Systemd → dinit: `Wants=` → `depends-ms:`, `Requires=` → `depends-on:`,
   the Noctalia dock pin must be `chromium`.
 - Flash with `dd bs=1M conv=nocreat oflag=direct`; verify read-back SHA-256.
 - CI: `.github/workflows/iso.yml` builds on `v*` tags and attaches the ISO
-  (`--clobber`). Current good release: **v1.5.2**.
+  (`--clobber`). Current good release: **v1.6.0** (pins cosmic-comp-traffic
+  `epoch-1.12.0` in the ISO).

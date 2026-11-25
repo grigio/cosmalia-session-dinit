@@ -84,6 +84,10 @@ jobs:
           grep -q '^ungoogled-chromium ' "$P"
           grep -q '^cosmalia-session-dinit ' "$P"
           grep -q '^greetd ' "$P"
+          # The compositor comes from the pinned local cosmic-comp-traffic
+          # build, never from the repo's cosmic-comp package.
+          grep -q '^cosmic-comp-traffic ' "$P"
+          ! grep -q '^cosmic-comp ' "$P"
           echo 'ISO verification passed: Artix-only packages, 2 GRUB entries'
 
       - name: Attach ISO to release

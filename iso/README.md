@@ -26,10 +26,11 @@ which is based on CachyOS + systemd + gtkgreet.
 - `dinit`, `userspawn-dinit` (per-user dinit manager), `elogind-dinit`,
   `dbus-dinit` + `dbus-dinit-user`, `greetd` + `greetd-dinit` + `greetd-tuigreet`.
 - `cosmalia-session-dinit` built from this checkout and `cosmic-comp-traffic`
-  from the pinned `epoch-1.12.0-rc.1` release, both served from a local pacman
+  from the pinned `epoch-1.12.0` release, both served from a local pacman
   repository; `noctalia`, portals, pipewire, polkit, NetworkManager, Alacritty
-  and Octopi come from the repos. The release package's `systemd-libs`
-  dependency is rewritten to `libelogind` at build time (see below).
+  and Octopi come from the repos. Older compositor builds declared
+  `systemd-libs`; `build.sh` keeps a compatibility rewrite to `libelogind` at
+  build time (a no-op for the pinned release, see below).
 - **Browser:** `ungoogled-chromium` from Artix galaxy (fallback `firefox`).
   The chosen package is written into `packages.x86_64` and pinned in the
   Noctalia dock. Override with `COSMALIA_BROWSER=<pkg>`.
@@ -71,11 +72,13 @@ A build host with a newer libalpm writes `%INSTALLED_DB%` into every local
 package database record; the Artix pacman in the image warns on every call.
 `customize_airootfs.sh` strips that key from `/var/lib/pacman/local/*/desc`.
 
-`cosmic-comp-traffic` is downloaded from the pinned release into `packages/`
-(override with `COSMIC_COMP_PKG`). Its `.PKGINFO` dependency `systemd-libs` is
-rewritten to `libelogind`: Artix has no `systemd-libs`, and the compositor has
-no direct `libsystemd` need — its `libseat` is linked against `libelogind` on
-Artix. `COSMIC_COMP_TAG` overrides the release tag.
+`cosmic-comp-traffic` is downloaded from the pinned release (`epoch-1.12.0`,
+asset `cosmic-comp-traffic-1.12.0-39-x86_64.pkg.tar.zst`) into `packages/`
+(override with `COSMIC_COMP_PKG`). `build.sh` also rewrites any `.PKGINFO`
+dependency `systemd-libs` to `libelogind`: Artix has no `systemd-libs`, and the
+compositor has no direct `libsystemd` need — its `libseat` is linked against
+`libelogind` on Artix. The pinned release does not declare `systemd-libs`, so
+this is currently a no-op. `COSMIC_COMP_TAG` overrides the release tag.
 
 ## Test in QEMU
 
