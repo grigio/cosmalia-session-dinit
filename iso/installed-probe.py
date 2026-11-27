@@ -62,6 +62,7 @@ def main():
         ("live sudoers removed", "ls /etc/sudoers.d/99-liveuser 2>&1 || echo REMOVED"),
         ("wheel sudo rule", "cat /etc/sudoers.d/99-cosmalia-wheel 2>&1; "
                             "id -nG $(getent passwd | awk -F: '$3>=1000 && $3<65534 && $1!=\"nobody\" && $1!=\"liveuser\"{print $1; exit}') | tr ' ' '\\n' | grep -x wheel || echo NOT_IN_WHEEL"),
+        ("time sync (chrony)", "dinitctl status chronyd 2>&1 | head -3; chronyc tracking 2>&1 | head -10 || true"),
         ("initramfs config", "cat /etc/mkinitcpio.conf | grep HOOKS; ls -lh /boot/initramfs-linux*.img"),
         ("desktop processes", "pgrep -a 'cosmic-comp|noctalia|dinit|greetd|tuigreet' | head -10 || true"),
         ("user dinit services", "u=$(getent passwd | awk -F: '$3>=1000 && $3<65534 && $1!=\"nobody\" && $1!=\"liveuser\"{print $1; exit}'); echo USER=$u; sudo -u \"$u\" env XDG_RUNTIME_DIR=/run/user/$(id -u \"$u\") dinitctl --user list 2>&1 | head -20 || true"),

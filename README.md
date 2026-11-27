@@ -18,6 +18,19 @@ Installing the package **does not** change the greeter default. Cosmalia is inst
 > [Arch Linux based cosmalia-session](https://github.com/grigio/cosmalia-session)
 > instead. Same desktop, but with an Arch/CachyOS base, systemd and gtkgreet.
 
+## Contents
+
+- [Stack](#stack)
+- [Files Installed](#files-installed)
+- [Install](#install)
+- [Live ISO](#live-iso)
+- [What Runs](#what-runs)
+- [Logs](#logs)
+- [FAQ](#faq)
+- [Troubleshooting](#troubleshooting)
+- [Reverting](#reverting)
+- [License](#license)
+
 ---
 
 ## Stack
@@ -87,7 +100,7 @@ The package is version-less in the source tree: `pkgver` and `pkgrel` are comput
 makepkg -f
 
 # Override version/release explicitly (e.g. for testing or CI)
-SESSION_VERSION=1.6.2 SESSION_PKGREL=1 makepkg -f
+SESSION_VERSION=1.6.3 SESSION_PKGREL=1 makepkg -f
 
 # Install the resulting package
 sudo pacman -U cosmalia-session-dinit-<pkgver>-<pkgrel>-any.pkg.tar.zst
@@ -115,14 +128,14 @@ sudo cosmalia-session-default --list
 ## Live ISO
 
 A ready-to-boot Artix/dinit live image is attached to every `v*` release tag
-(current: **v1.6.2**). It contains only Artix packages and boots with dinit →
+(current: **v1.6.3**). It contains only Artix packages and boots with dinit →
 greetd/tuigreet → `cosmalia-session-dinit`. GRUB/syslinux offer two entries:
 the normal boot and a safe `copytoram=y` fallback for USB sticks that stall.
 Neither registers a serial console, which avoids hangs on bare-metal machines
 without a working COM1.
 
 ```sh
-gh release download v1.6.2 -R grigio/cosmalia-session-dinit -p '*.iso' -D /tmp/cosmalia-iso
+gh release download v1.6.3 -R grigio/cosmalia-session-dinit -p '*.iso' -D /tmp/cosmalia-iso
 # Replace /dev/sda with your stick; check with lsblk first.
 sudo dd if=/tmp/cosmalia-iso/cosmalia-artix-dinit-*.iso of=/dev/sda \
      bs=1M status=progress conv=nocreat oflag=direct
@@ -148,7 +161,7 @@ Started by the session (and supervised by dinit):
 
 | Process | Notes |
 |---------|-------|
-| `cosmic-comp --no-xwayland` | Compositor; started by launcher, must run before socket exists |
+| `cosmic-comp --no-xwayland` | Compositor from the `cosmic-comp-traffic` fork (the binary is named `cosmic-comp`); started by the launcher, must run before the socket exists |
 | `noctalia` | Shell; dinit service, `restart=on-failure`, stopped when target stops |
 | `cosmic-settings-daemon` | Config watchers; dinit service, same lifecycle |
 | `xdg-desktop-portal` + `xdg-desktop-portal-cosmic` | Restarted per-login (cosmic backend has no stop-on-logout hook, survives logout with stale `WAYLAND_DISPLAY`) |
@@ -228,6 +241,31 @@ The launcher/compositor log is truncated each login. Services log via dinit's lo
 
 ---
 
+## FAQ
+
+**Q: Does hybrid tiling work?**
+
+Yes. Press `SUPER + Y` to toggle hybrid tiling.
+
+**Q: Can I use `cosmic-comp` instead of `cosmic-comp-traffic`?**
+
+No. `cosmic-comp-traffic` is a fork with improvements and Wayland integrations
+that upstream `cosmic-comp` does not have (traffic-light decorations, blur,
+animations, 3-finger swipes, in-process Alt+Tab — see [Stack](#stack)). Note
+that the binary is called `cosmic-comp` either way; the choice is which package
+provides it. You can swap in the upstream compositor if you insist, and it
+works, but it is limited: those extras will be missing.
+
+**Q: Do I have to use Cosmic Settings or Noctalia settings?**
+
+Both. They are complementary, not alternatives — some features are managed by
+one UI and others by the other. Window/compositor behaviour and keyboard
+shortcuts live in **Cosmic Settings**, while the shell — bar, dock, launcher,
+notifications, lock screen and idle/suspend — is configured in **Noctalia
+settings**.
+
+---
+
 ## Troubleshooting
 
 | Issue | Check |
@@ -241,7 +279,7 @@ The launcher/compositor log is truncated each login. Services log via dinit's lo
 | File dialogs wrong/missing | `pacman -Q xdg-desktop-portal-cosmic xdg-desktop-portal-gtk`, `XDG_CURRENT_DESKTOP=cosmalia:COSMIC /usr/lib/xdg-desktop-portal -v -r`, check `cosmalia-portals.conf` exists. A user config in `~/.config/xdg-desktop-portal/` overrides it. |
 | Black screen on real AMD/Intel hardware (live ISO) | Read `/run/user/1000/cosmalia-session.log`; on the live ISO the launcher copies it to `SESSIONLOG.TXT` on the USB's FAT partition, where the initramfs also writes `BOOTLOG.TXT`. The launcher waits for a real DRM card and skips `simpledrm` cards via `COSMIC_DRM_BLOCK_DEVICES`. If boot stalls earlier, the last `cosmalia:` console marker identifies the stage; see `iso/README.md`. |
 | "Failed to open service channel Wayland connection" | Expected and harmless (no Mutter service channel under cosmic-comp). |
-| Traffic-light decorations missing | Ensure `cosmic-comp` package is installed (provides them). |
+| Traffic-light decorations missing | They come from the `cosmic-comp-traffic` fork, which provides `/usr/bin/cosmic-comp` (`pacman -Q cosmic-comp-traffic`). Upstream `cosmic-comp` does not include them — see the [FAQ](#faq). |
 | Greeter doesn't default to Cosmalia | Intentional on install. Run `sudo cosmalia-session-default` or pick it once (Noctalia Greeter remembers). |
 | Session log missing | `XDG_RUNTIME_DIR` must exist; launch from a logind login, not a bare console. |
 

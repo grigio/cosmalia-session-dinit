@@ -137,7 +137,7 @@ done
 # The live image already has these symlinks (they were copied with the
 # squashfs); re-assert them so a manual partitioning choice cannot lose them.
 install -d -m 0755 /etc/dinit.d/boot.d
-for svc in dbus logind userspawn NetworkManager greetd serial-getty-ttyS0 qemu-ga; do
+for svc in dbus logind userspawn NetworkManager greetd serial-getty-ttyS0 qemu-ga chronyd; do
     [[ -e "/etc/dinit.d/$svc" ]] || { say "service $svc not found, skipping"; continue; }
     ln -sfn "../$svc" "/etc/dinit.d/boot.d/$svc"
 done

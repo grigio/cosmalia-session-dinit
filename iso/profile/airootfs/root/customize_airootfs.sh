@@ -76,6 +76,18 @@ EOF
 chmod 0644 /etc/dinit.d/serial-getty-ttyS0
 ln -sfn ../serial-getty-ttyS0 /etc/dinit.d/boot.d/serial-getty-ttyS0
 
+# Time synchronization: Artix has no systemd-timesyncd. chrony/chrony-dinit
+# ship no pacman install hook, so create the sysuser and state directory that
+# systemd-sysusers/tmpfiles would normally provide, then enable chronyd.
+if [[ -x /usr/bin/chronyd && -f /etc/dinit.d/chronyd ]]; then
+    id chrony >/dev/null 2>&1 || \
+        useradd -r -d /var/lib/chrony -s /usr/bin/nologin \
+                -c "Network Time Protocol" chrony 2>/dev/null || true
+    install -d -m 0755 -o chrony -g chrony /var/lib/chrony 2>/dev/null || \
+        install -d -m 0755 /var/lib/chrony
+    ln -sfn ../chronyd /etc/dinit.d/boot.d/chronyd
+fi
+
 # Noctalia's idle/lock integration must not suspend a live USB stick.
 install -d -m 0755 /etc/elogind/logind.conf.d
 cat >/etc/elogind/logind.conf.d/99-cosmalia.conf <<'EOF'

@@ -105,3 +105,9 @@ xfsprogs
 squashfs-tools
 rsync
 os-prober
+
+# --- time synchronization (no systemd-timesyncd on Artix/dinit) ------------
+# chronyd runs as a dinit service; no .INSTALL hook creates its user/dir, so
+# customize_airootfs.sh does that explicitly.
+chrony
+chrony-dinit

@@ -37,6 +37,11 @@ which is based on CachyOS + systemd + gtkgreet.
 - Trimmed: no docs/man/locale via `NoExtract`, zstd squashfs level 3, no
   KDE/GNOME, buggy cosmic portal + keyring prompter disabled with D-Bus
   `/usr/bin/true` stubs. Screenshots use grim|satty + the wlr portal.
+- **Time sync:** Artix has no `systemd-timesyncd`; `chrony` + `chrony-dinit`
+  are installed and `chronyd` is enabled in `boot.d` in both the live image
+  and the installed system. Since those packages have no pacman install
+  hook, `customize_airootfs.sh` creates the `chrony` sysuser and
+  `/var/lib/chrony` explicitly.
 - **Installer:** Artix `calamares` 3.4.2 in offline mode copies the running
   squashfs to disk; Limine is deployed by a small chroot script because
   upstream Calamares does not support it (and dinit has no
