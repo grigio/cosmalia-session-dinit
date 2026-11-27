@@ -5,7 +5,7 @@ set -euo pipefail
 
 ISO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RESULT="${INSTALLER_RESULT_DIR:-$ISO_DIR/test-results/installer}"
-ISO="$(ls -t "$ISO_DIR"/out/*.iso 2>/dev/null | head -1)"
+ISO="${INSTALLER_ISO:-$(ls -t "$ISO_DIR"/out/*.iso 2>/dev/null | head -1)}"
 [[ -n "$ISO" ]] || { echo "No ISO found in $ISO_DIR/out; run ./build.sh first" >&2; exit 1; }
 
 mkdir -p "$RESULT"

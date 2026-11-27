@@ -147,7 +147,9 @@ python3 installer-drive.py test-results/installer   # drive the wizard to the en
 Evidence lands in `test-results/installer/`: `installer-report.txt`,
 `installer-welcome.png`, `final-installed-page.png`, `installed-report.txt`,
 `installed-desktop.png` and `disk.qcow2`. For an interactive session use
-`./run-installer-vm.sh` (VNC `127.0.0.1:5909`), then `./run-installed-vm.sh`
+`INSTALLER_ISO=/path/to/release.iso ./test-installer-full.sh` tests a specific
+image instead of the newest local build. `./run-installer-vm.sh`
+(VNC `127.0.0.1:5909`), then `./run-installed-vm.sh`
 (VNC `127.0.0.1:5910`); both leave the monitor/QMP/QGA sockets available for
 `qga.py`, `vmctl.py` and `installer-drive.py`.
 
