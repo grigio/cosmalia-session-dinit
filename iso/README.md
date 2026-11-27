@@ -123,9 +123,12 @@ Two Artix-specific details differ from the CachyOS/systemd reference:
     normal initramfs for `/boot/vmlinuz-linux`, enables dinit services
     (`dbus`, `logind`, `NetworkManager`, `greetd`, `qemu-ga`, serial getty),
     deletes `liveuser`, removes any empty `~/.config/dinit.d/boot` left by
-    Calamares' skel copy (otherwise userspawn cannot install the real boot
-    service and dbus/pipewire never start), and rewrites greetd autologin for
-    the new user.
+    Calamares' skel copy, and rewrites greetd autologin for the new user.
+  - The image also ships a real `~/.config/dinit.d/boot` in skel and a patched
+    `/etc/xdg/userspawn/userspawnrc` that force-installs it at login. Without
+    this the user `boot` service is empty and **no** boot.d units start:
+    session dbus, pipewire, pipewire-pulse, wireplumber, audio and
+    `cosmic-settings-daemon` all fail.
   - `cosmalia-limine-install` copies `BOOTX64.EFI` to the ESP fallback path,
     copies kernel + initramfs to the ESP root, and writes `limine.conf` with
     `root=UUID=…` from the generated fstab. BIOS installs call

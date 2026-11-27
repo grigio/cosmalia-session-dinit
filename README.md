@@ -87,7 +87,7 @@ The package is version-less in the source tree: `pkgver` and `pkgrel` are comput
 makepkg -f
 
 # Override version/release explicitly (e.g. for testing or CI)
-SESSION_VERSION=1.6.1 SESSION_PKGREL=1 makepkg -f
+SESSION_VERSION=1.6.2 SESSION_PKGREL=1 makepkg -f
 
 # Install the resulting package
 sudo pacman -U cosmalia-session-dinit-<pkgver>-<pkgrel>-any.pkg.tar.zst
@@ -115,14 +115,14 @@ sudo cosmalia-session-default --list
 ## Live ISO
 
 A ready-to-boot Artix/dinit live image is attached to every `v*` release tag
-(current: **v1.6.1**). It contains only Artix packages and boots with dinit →
+(current: **v1.6.2**). It contains only Artix packages and boots with dinit →
 greetd/tuigreet → `cosmalia-session-dinit`. GRUB/syslinux offer two entries:
 the normal boot and a safe `copytoram=y` fallback for USB sticks that stall.
 Neither registers a serial console, which avoids hangs on bare-metal machines
 without a working COM1.
 
 ```sh
-gh release download v1.6.1 -R grigio/cosmalia-session-dinit -p '*.iso' -D /tmp/cosmalia-iso
+gh release download v1.6.2 -R grigio/cosmalia-session-dinit -p '*.iso' -D /tmp/cosmalia-iso
 # Replace /dev/sda with your stick; check with lsblk first.
 sudo dd if=/tmp/cosmalia-iso/cosmalia-artix-dinit-*.iso of=/dev/sda \
      bs=1M status=progress conv=nocreat oflag=direct

@@ -90,6 +90,23 @@ chmod 0644 /etc/elogind/logind.conf.d/99-cosmalia.conf
 # harness. The package ships /etc/dinit.d/qemu-ga but does not enable it.
 ln -sfn ../qemu-ga /etc/dinit.d/boot.d/qemu-ga
 
+# userspawn copies its dinit.d with `cp -r --update=none`. Calamares (and some
+# skel copiers) can leave an empty ~/.config/dinit.d/boot behind, which
+# suppresses the whole boot.d set: no session dbus, pipewire, wireplumber or
+# cosmic-settings-daemon (and therefore no audio). Force the real boot service
+# on every login; the skel now ships a correct copy as well.
+if [[ -f /etc/xdg/userspawn/userspawnrc ]]; then
+    cat >/etc/xdg/userspawn/userspawnrc <<'EOF'
+#!/bin/bash
+cfgdir="${XDG_CONFIG_HOME:-$HOME/.config}/dinit.d"
+mkdir -p "$cfgdir"
+cp -rf --update=none /etc/xdg/userspawn/dinit.d/. "$cfgdir"/
+cp -f /etc/xdg/userspawn/dinit.d/boot "$cfgdir/boot"
+exec dinit --user
+EOF
+    chmod 0755 /etc/xdg/userspawn/userspawnrc
+fi
+
 # ---------------------------------------------------------------------------
 # Calamares installer assets and locale.
 # Our /etc/calamares/ configs are safe to ship in the overlay: Artix Calamares

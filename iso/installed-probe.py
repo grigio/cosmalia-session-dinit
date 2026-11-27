@@ -65,6 +65,8 @@ def main():
         ("initramfs config", "cat /etc/mkinitcpio.conf | grep HOOKS; ls -lh /boot/initramfs-linux*.img"),
         ("desktop processes", "pgrep -a 'cosmic-comp|noctalia|dinit|greetd|tuigreet' | head -10 || true"),
         ("user dinit services", "u=$(getent passwd | awk -F: '$3>=1000 && $3<65534 && $1!=\"nobody\" && $1!=\"liveuser\"{print $1; exit}'); echo USER=$u; sudo -u \"$u\" env XDG_RUNTIME_DIR=/run/user/$(id -u \"$u\") dinitctl --user list 2>&1 | head -20 || true"),
+        ("audio services (pipewire)", "u=$(getent passwd | awk -F: '$3>=1000 && $3<65534 && $1!=\"nobody\" && $1!=\"liveuser\"{print $1; exit}'); sudo -u \"$u\" env XDG_RUNTIME_DIR=/run/user/$(id -u \"$u\") dinitctl --user list 2>&1 | grep -E 'dbus|pipewire|wireplumber|cosmic-settings-daemon' || echo MISSING"),
+        ("pulseaudio via pipewire", "u=$(getent passwd | awk -F: '$3>=1000 && $3<65534 && $1!=\"nobody\" && $1!=\"liveuser\"{print $1; exit}'); sudo -u \"$u\" env XDG_RUNTIME_DIR=/run/user/$(id -u \"$u\") pactl info 2>&1 | head -8 || echo MISSING"),
         ("cosmalia session log", "u=$(getent passwd | awk -F: '$3>=1000 && $3<65534 && $1!=\"nobody\" && $1!=\"liveuser\"{print $1; exit}'); cat /run/user/$(id -u \"$u\")/cosmalia-session.log 2>&1 | tail -12 || true"),
         ("packages", "pacman -Q cosmalia-session-dinit cosmic-comp-traffic noctalia greetd limine calamares nautilus 2>/dev/null"),
     ]
