@@ -28,7 +28,7 @@ which is based on CachyOS + systemd + gtkgreet.
 - `cosmalia-session-dinit` built from this checkout and `cosmic-comp-traffic`
   from the pinned `epoch-1.12.0` release, both served from a local pacman
   repository; `noctalia`, portals, pipewire, polkit, NetworkManager, Alacritty,
-  Nautilus and Octopi come from the repos. Older compositor builds declared
+  `cosmic-files` and Octopi come from the repos. Older compositor builds declared
   `systemd-libs`; `build.sh` keeps a compatibility rewrite to `libelogind` at
   build time (a no-op for the pinned release, see below).
 - **Browser:** `ungoogled-chromium` from Artix galaxy (fallback `firefox`).

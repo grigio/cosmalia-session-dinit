@@ -71,7 +71,8 @@ pipewire-pulse-dinit
 wireplumber-dinit
 
 # --- small userspace that makes the live session usable --------------------
-adwaita-icon-theme
+# No explicit adwaita-icon-theme: COSMIC apps use cosmic-icon-theme above, and
+# the GTK portal still pulls Adwaita icons in transitively via gtk3.
 ttf-dejavu
 networkmanager
 networkmanager-dinit
@@ -82,8 +83,8 @@ iproute2
 inotify-tools
 htop
 octopi
-# nautilus file manager (GTK4); needs no systemd service.
-nautilus
+# cosmic-files file manager (libcosmic); needs no systemd service.
+cosmic-files
 qemu-guest-agent
 qemu-guest-agent-dinit
 
