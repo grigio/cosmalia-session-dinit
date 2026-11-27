@@ -85,3 +85,28 @@ HandleHibernateKey=ignore
 HandleLidSwitch=ignore
 EOF
 chmod 0644 /etc/elogind/logind.conf.d/99-cosmalia.conf
+
+# qemu-ga answers the QEMU Guest Agent probes used by the installer test
+# harness. The package ships /etc/dinit.d/qemu-ga but does not enable it.
+ln -sfn ../qemu-ga /etc/dinit.d/boot.d/qemu-ga
+
+# ---------------------------------------------------------------------------
+# Calamares installer assets and locale.
+# Our /etc/calamares/ configs are safe to ship in the overlay: Artix Calamares
+# installs its defaults under /usr/share/calamares/, not /etc/calamares/.
+# ---------------------------------------------------------------------------
+brand_dir=/usr/share/calamares/branding
+if [[ -d "$brand_dir/default" && -d "$brand_dir/cosmalia" ]]; then
+    cp -f "$brand_dir"/default/{banner.png,squid.png,languages.png,show.qml,stylesheet.qss} \
+          "$brand_dir/cosmalia/" 2>/dev/null || true
+fi
+chmod 0755 /usr/local/bin/cosmalia-installer \
+           /usr/local/bin/cosmalia-postinstall \
+           /usr/local/bin/cosmalia-limine-install 2>/dev/null || true
+
+# Calamares offers English as a language; generate its locale explicitly so
+# the installed system can pick it too.
+if [[ -f /etc/locale.gen ]]; then
+    sed -i 's|^#en_US.UTF-8 UTF-8$|en_US.UTF-8 UTF-8|' /etc/locale.gen
+    locale-gen >/dev/null 2>&1 || true
+fi

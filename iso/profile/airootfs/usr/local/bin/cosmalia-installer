@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Launch the Artix (Calamares) installer shipped in this live ISO.
+# The installer is configured in /etc/calamares/ to copy the running live
+# environment to disk and to boot it with Limine.
+set -euo pipefail
+
+CONFIG=/etc/calamares/settings.conf
+[[ -f "$CONFIG" ]] || { echo "cosmalia-installer: missing $CONFIG" >&2; exit 1; }
+
+if (( EUID == 0 )); then
+    exec calamares "$@"
+fi
+
+# liveuser is in wheel; the live image ships a nopasswd polkit rule.
+exec pkexec env \
+    DISPLAY="${DISPLAY:-}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-wayland}" \
+    QT_QPA_PLATFORM=wayland \
+    calamares "$@"

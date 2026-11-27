@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Called inside the install chroot by Calamares (shellprocess@cosmalia).
+# Turns the unpacked live filesystem into a regular, bootable Cosmalia system
+# with dinit as PID 1 and Limine as the bootloader.
+set -euo pipefail
+
+say() { printf 'cosmalia-postinstall: %s\n' "$*"; }
+
+# --- drop live-only configuration -------------------------------------------
+# The live sudoers file would leave the installed user passwordless; the
+# volatile journal and "no suspend" overrides only make sense on a USB stick.
+rm -f /etc/sudoers.d/99-liveuser
+rm -f /etc/elogind/logind.conf.d/99-cosmalia.conf
+rmdir /etc/elogind/logind.conf.d 2>/dev/null || true
+rm -f /run/cosmalia-bootlog.txt /SESSIONLOG.TXT /BOOTLOG.TXT 2>/dev/null || true
+
+# Calamares' machineid module calls systemd-machine-id-setup (no systemd on
+# Artix), so generate a D-Bus compatible machine id here instead.
+if [[ ! -s /etc/machine-id ]] || grep -q uninitialized /etc/machine-id; then
+    newid="$(tr -d '-' </proc/sys/kernel/random/uuid)"
+    printf '%s\n' "$newid" >/etc/machine-id
+    chmod 0444 /etc/machine-id
+    printf '%s\n' "$newid" >/var/lib/dbus/machine-id
+    chmod 0444 /var/lib/dbus/machine-id
+fi
+
+# CRITICAL: the live mkinitcpio drop-in selects the artix_loop_mnt hooks.
+# Leaving it in place would bake the live overlay mount into the installed
+# initramfs, which has no squashfs to mount and would drop to an emergency
+# shell. The regular config below must be the only one in effect.
+rm -f /etc/mkinitcpio.conf.d/cosmalia-live.conf
+rmdir /etc/mkinitcpio.conf.d 2>/dev/null || true
+
+# --- a normal (non-archiso) initramfs ---------------------------------------
+cat >/etc/mkinitcpio.conf <<'EOF'
+MODULES=()
+BINARIES=()
+FILES=()
+HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block filesystems fsck)
+COMPRESSION="zstd"
+EOF
+
+kver="$(basename "$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)")"
+[[ -n "$kver" && -d "/usr/lib/modules/$kver" ]] || {
+    say "no kernel modules found in /usr/lib/modules"
+    exit 1
+}
+
+# unpackfs copies vmlinuz from the ISO's boot directory to /boot; fall back to
+# the copy shipped in /usr/lib/modules (the Artix linux package keeps it there).
+if [[ ! -f /boot/vmlinuz-linux ]]; then
+    cp -f "/usr/lib/modules/$kver/vmlinuz" /boot/vmlinuz-linux
+fi
+if [[ ! -e "/usr/lib/modules/$kver/vmlinuz" ]]; then
+    ln -sf /boot/vmlinuz-linux "/usr/lib/modules/$kver/vmlinuz"
+fi
+
+cat >/etc/mkinitcpio.d/linux.preset <<'EOF'
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/boot/vmlinuz-linux"
+PRESETS=('default' 'fallback')
+default_image="/boot/initramfs-linux.img"
+fallback_options="-S autodetect"
+fallback_image="/boot/initramfs-linux-fallback.img"
+EOF
+
+say "generating initramfs for kernel $kver"
+if ! /usr/bin/mkinitcpio -p linux >/var/log/cosmalia-mkinitcpio.log 2>&1; then
+    say "mkinitcpio failed:"
+    cat /var/log/cosmalia-mkinitcpio.log
+    exit 1
+fi
+[[ -s /boot/initramfs-linux.img ]] || {
+    say "mkinitcpio produced no /boot/initramfs-linux.img"
+    exit 1
+}
+
+# --- greetd: autologin the new user into Cosmalia ----------------------------
+# Calamares' users module has created the new account. removeuser does not
+# always delete the live user (depending on globalstorage), so explicitly
+# exclude it and take the highest-uid regular account as the installed user.
+if id liveuser >/dev/null 2>&1; then
+    userdel -r liveuser >/dev/null 2>&1 || true
+fi
+newuser="$(awk -F: '$3 >= 1000 && $3 < 65534 && $1 != "nobody" && $1 != "liveuser" { u=$1 } END { print u }' /etc/passwd)"
+[[ -n "$newuser" ]] || { say "could not determine the installed user"; exit 1; }
+say "autologin user: $newuser"
+
+# Artix ships /etc/sudoers with the %wheel rule commented out. Calamares adds
+# the user to wheel (see users.conf) but sudoersConfigureWithGroup is off, so
+# install the drop-in ourselves; otherwise the installed user cannot sudo.
+usermod -aG wheel "$newuser" >/dev/null 2>&1 || true
+install -d -m 0755 /etc/sudoers.d
+printf '%%wheel ALL=(ALL:ALL) ALL\n' >/etc/sudoers.d/99-cosmalia-wheel
+chmod 0440 /etc/sudoers.d/99-cosmalia-wheel
+
+cat >/etc/greetd/config.toml <<EOF
+# greetd with the textual tuigreet greeter. Logging out returns to this
+# greeter with Cosmalia as the only session.
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --cmd /usr/bin/cosmalia-session --issue --time --user $newuser --remember-session"
+user = "greeter"
+
+[initial_session]
+command = "/usr/bin/cosmalia-session"
+user = "$newuser"
+EOF
+chmod 0644 /etc/greetd/config.toml
+printf '/usr/bin/cosmalia-session\n' >/etc/greetd/environments
+
+# The unpacked root still says "Live"; make the installed system identifiable.
+if [[ -f /etc/os-release ]]; then
+    sed -i 's|^PRETTY_NAME=.*|PRETTY_NAME="Cosmalia (Artix Linux, dinit)"|' /etc/os-release
+fi
+
+# removeuser/userdel may leave the live home directory behind.
+if ! id liveuser >/dev/null 2>&1 && [[ -d /home/liveuser ]]; then
+    rm -rf /home/liveuser
+fi
+
+# --- dinit services ----------------------------------------------------------
+# Calamares' skel copy can leave an empty ~/.config/dinit.d/boot behind.
+# userspawnrc uses `cp -r --update=none`, so an empty file would prevent the
+# real internal `boot` service from being installed at first login and the
+# user's dbus/pipewire units would never start. Remove it so userspawn can
+# copy the package's version (boot.d symlinks from skel are kept).
+for home in /home/*; do
+    [[ -d "$home/.config/dinit.d" ]] || continue
+    if [[ -f "$home/.config/dinit.d/boot" && ! -s "$home/.config/dinit.d/boot" ]]; then
+        rm -f "$home/.config/dinit.d/boot"
+    fi
+done
+
+# The live image already has these symlinks (they were copied with the
+# squashfs); re-assert them so a manual partitioning choice cannot lose them.
+install -d -m 0755 /etc/dinit.d/boot.d
+for svc in dbus logind userspawn NetworkManager greetd serial-getty-ttyS0 qemu-ga; do
+    [[ -e "/etc/dinit.d/$svc" ]] || { say "service $svc not found, skipping"; continue; }
+    ln -sfn "../$svc" "/etc/dinit.d/boot.d/$svc"
+done
+# tty1 belongs to greetd; dinit-rc's stock getty must not race it.
+rm -f /usr/lib/dinit.d/boot.d/agetty
+
+say "installed system configured (user=$newuser, kernel=$kver)"

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Install Cosmalia
+Comment=Install this Artix live environment to disk (Calamares + Limine)
+Exec=/usr/local/bin/cosmalia-installer
+Terminal=false
+Categories=System;Administration;
+Keywords=install;calamares;artix;limine;dinit;
+Icon=system-installer
+NoDisplay=false

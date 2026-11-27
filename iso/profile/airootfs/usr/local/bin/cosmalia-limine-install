@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Called inside the install chroot by Calamares (shellprocess@limine).
+#
+# Artix' Calamares ships the upstream bootloader module which only supports
+# GRUB/systemd-boot/refind, and Limine 12 removed the `limine-install` helper
+# that older modules called. This script does both jobs explicitly:
+#   * deploy the Limine UEFI binary to the ESP fallback path,
+#   * copy kernel + initramfs to the ESP root (Limine's boot():// URI),
+#   * write the Cosmalia menu entries from the generated /etc/fstab,
+#   * register an NVRAM entry when running on UEFI (best effort),
+#   * install the BIOS stage when running on legacy firmware.
+set -euo pipefail
+
+say() { printf 'cosmalia-limine-install: %s\n' "$*"; }
+
+esp="$(awk '$3 == "vfat" { print $2; exit }' /etc/fstab 2>/dev/null || true)"
+[[ -n "$esp" ]] || esp="/boot/efi"
+[[ -d "$esp" ]] || { say "no ESP at $esp"; exit 1; }
+
+root_uuid="$(awk '$2 == "/" && $1 ~ /^UUID=/ { sub(/^UUID=/, "", $1); print $1; exit }' /etc/fstab)"
+[[ -n "$root_uuid" ]] || { say "could not find root UUID in /etc/fstab"; exit 1; }
+
+# Kernel and initramfs live at the ESP root so limine.conf can use boot():/.
+if [[ "$esp" != "/boot" ]]; then
+    for f in /boot/vmlinuz-linux /boot/initramfs-linux.img /boot/initramfs-linux-fallback.img; do
+        [[ -f "$f" ]] || { say "missing boot file $f"; exit 1; }
+        cp -f "$f" "$esp/$(basename "$f")"
+    done
+fi
+
+cat >"$esp/limine.conf" <<EOF
+timeout: 5
+default_entry: 1
+remember_last_entry: yes
+
+/Cosmalia
+    protocol: linux
+    path: boot():/vmlinuz-linux
+    module_path: boot():/initramfs-linux.img
+    cmdline: root=UUID=$root_uuid rw quiet nowatchdog
+
+/Cosmalia (fallback initramfs)
+    protocol: linux
+    path: boot():/vmlinuz-linux
+    module_path: boot():/initramfs-linux-fallback.img
+    cmdline: root=UUID=$root_uuid rw quiet nowatchdog
+EOF
+chmod 0644 "$esp/limine.conf"
+
+# --- UEFI: fallback \EFI\BOOT\BOOTX64.EFI -----------------------------------
+if [[ -d /sys/firmware/efi ]]; then
+   efi_src="$(limine --print-datadir 2>/dev/null || printf /usr/share/limine)"
+    [[ -f "$efi_src/BOOTX64.EFI" ]] || efi_src=/usr/share/limine
+    [[ -f "$efi_src/BOOTX64.EFI" ]] || { say "BOOTX64.EFI not found"; exit 1; }
+    mkdir -p "$esp/EFI/BOOT"
+    cp -f "$efi_src/BOOTX64.EFI" "$esp/EFI/BOOT/BOOTX64.EFI"
+
+    if command -v efibootmgr >/dev/null 2>&1; then
+        src="$(findmnt -n -o SOURCE "$esp" 2>/dev/null || true)"
+        disk="$(lsblk -n -o PKNAME "$src" 2>/dev/null || true)"
+        part="$(grep -oE '[0-9]+$' <<<"$src" || true)"
+        if [[ -n "$disk" && -n "$part" ]]; then
+            efibootmgr -c -d "/dev/$disk" -p "$part" -L Cosmalia \
+                -l '\EFI\BOOT\BOOTX64.EFI' >/dev/null 2>&1 || true
+        fi
+    fi
+else
+    # --- BIOS: Limine's standalone stage ------------------------------------
+    src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+    disk="$(lsblk -n -o PKNAME "$src" 2>/dev/null || true)"
+    if [[ -n "$disk" ]]; then
+        limine bios-install "/dev/$disk" >/dev/null 2>&1 || \
+            say "limine bios-install failed (non-fatal)"
+    fi
+fi
+
+say "installed Limine with entries in $esp/limine.conf (root UUID=$root_uuid)"

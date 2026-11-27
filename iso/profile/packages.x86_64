@@ -82,5 +82,26 @@ iproute2
 inotify-tools
 htop
 octopi
+# nautilus file manager (GTK4); needs no systemd service.
+nautilus
 qemu-guest-agent
 qemu-guest-agent-dinit
+
+# --- installer: Calamares in offline mode + Limine -------------------------
+# Calamares copies this live squashfs to disk (no network, no pacstrap).
+# Limine is the bootloader; the upstream Calamares bootloader module does not
+# support it, so /usr/local/bin/cosmalia-limine-install does the work instead.
+# qt6-wayland provides the Qt Wayland platform plugin for the Calamares GUI.
+# dosfstools provides mkfs.fat for the EFI system partition.
+# squashfs-tools provides unsquashfs, used by Calamares' unpackfs module.
+# rsync copies the live root; os-prober avoids a noisy Calamares warning.
+calamares
+qt6-wayland
+limine
+efibootmgr
+dosfstools
+btrfs-progs
+xfsprogs
+squashfs-tools
+rsync
+os-prober

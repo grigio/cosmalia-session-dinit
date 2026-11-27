@@ -23,4 +23,8 @@ file_permissions=(
   ["/root"]="0:0:700"
   # /home/liveuser is created by mkarchiso from passwd + skel.
   ["/etc/sudoers.d/99-liveuser"]="0:0:440"
+  # Cosmalia installer tooling.
+  ["/usr/local/bin/cosmalia-installer"]="0:0:755"
+  ["/usr/local/bin/cosmalia-postinstall"]="0:0:755"
+  ["/usr/local/bin/cosmalia-limine-install"]="0:0:755"
 )

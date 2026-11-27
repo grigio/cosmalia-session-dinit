@@ -27,16 +27,20 @@ which is based on CachyOS + systemd + gtkgreet.
   `dbus-dinit` + `dbus-dinit-user`, `greetd` + `greetd-dinit` + `greetd-tuigreet`.
 - `cosmalia-session-dinit` built from this checkout and `cosmic-comp-traffic`
   from the pinned `epoch-1.12.0` release, both served from a local pacman
-  repository; `noctalia`, portals, pipewire, polkit, NetworkManager, Alacritty
-  and Octopi come from the repos. Older compositor builds declared
+  repository; `noctalia`, portals, pipewire, polkit, NetworkManager, Alacritty,
+  Nautilus and Octopi come from the repos. Older compositor builds declared
   `systemd-libs`; `build.sh` keeps a compatibility rewrite to `libelogind` at
   build time (a no-op for the pinned release, see below).
 - **Browser:** `ungoogled-chromium` from Artix galaxy (fallback `firefox`).
   The chosen package is written into `packages.x86_64` and pinned in the
   Noctalia dock. Override with `COSMALIA_BROWSER=<pkg>`.
-- Trimmed: no docs/man/locale via `NoExtract`, zstd squashfs level 15, no
-  KDE/GNOME/Calamares, buggy cosmic portal + keyring prompter disabled with
-  D-Bus `/usr/bin/true` stubs. Screenshots use grim|satty + the wlr portal.
+- Trimmed: no docs/man/locale via `NoExtract`, zstd squashfs level 3, no
+  KDE/GNOME, buggy cosmic portal + keyring prompter disabled with D-Bus
+  `/usr/bin/true` stubs. Screenshots use grim|satty + the wlr portal.
+- **Installer:** Artix `calamares` 3.4.2 in offline mode copies the running
+  squashfs to disk; Limine is deployed by a small chroot script because
+  upstream Calamares does not support it (and dinit has no
+  `services-systemd` module). See below.
 
 ## Build
 
@@ -59,12 +63,17 @@ Outputs:
 Nothing is installed on the host: only `mkarchiso` runs via `sudo`. `build.sh`
 works on a copy of `profile/` in `ISO_WORK_DIR` and wipes it first (mkarchiso's
 `_run_once` markers otherwise reuse stale artifacts). Environment overrides:
-`ISO_REPO_DIR`, `ISO_OUT_DIR`, `ISO_WORK_DIR`, `COSMALIA_BROWSER`.
+`ISO_REPO_DIR`, `ISO_OUT_DIR`, `ISO_WORK_DIR`, `COSMALIA_BROWSER`. The work
+dir must have several GiB free; if `/tmp` is a small tmpfs, use a disk path,
+e.g. `ISO_WORK_DIR=~/iso-build/work ISO_REPO_DIR=~/iso-build/local-repo`.
+`build.sh` injects a build-only `CacheDir` under that work dir so pacman never
+reuses stale packages from the host cache.
 
-The **build-time** pacman.conf uses `SigLevel = Optional TrustAll`: a build
-host that is not Artix does not trust Artix signing keys, so pacstrap would
-otherwise reject every Artix package. Downloads still come from HTTPS official
-mirrors. The **live image** keeps `SigLevel = Required DatabaseOptional` and
+The **build-time** pacman.conf uses `SigLevel = Never` and a single mirror per
+repo: the build host may not trust (or has an outdated copy of) the Artix
+signing keys, and mixing mirrors can pair a package with the wrong `.sig`.
+Downloads still come from HTTPS official mirrors. The **live image** keeps
+`SigLevel = Required DatabaseOptional` and
 `customize_airootfs.sh` initialises and populates the Artix keyring inside the
 chroot, so `pacman -Syu` verifies signatures normally.
 
@@ -92,6 +101,52 @@ desktop / tuigreet / re-login screenshots, and writes `test-results/report.txt`.
 Both `test.sh` and `run.sh` find the newest ISO in the project's `iso/out/`
 (or their own `out/` from older builds). For an interactive window with host
 internet via a TAP + dnsmasq + nftables masquerade, use `./run.sh`.
+
+## Install to disk (Calamares + Limine)
+
+The live ISO ships an **offline** Calamares installer: `unpackfs` copies
+`/run/artix/bootmnt/cosmalia/x86_64/airootfs.sfs` to the target disk (the
+Artix mkarchiso mount point), so the installed system is
+exactly the environment you booted (no downloads, no pacstrap, no package
+chooser). Launch **Install Cosmalia** from the app menu, or run
+`cosmalia-installer` in a live shell. The wizard is welcome → locale →
+keyboard → partition (erase disk: 300 MiB ESP + ext4 root) → users → summary.
+
+Two Artix-specific details differ from the CachyOS/systemd reference:
+
+- Artix Calamares has no `bootloader` support for Limine and no
+  `services-systemd` module. `/etc/calamares/settings.conf` therefore runs two
+  `shellprocess` instances **inside the target chroot**:
+  - `cosmalia-postinstall` drops live-only overrides (including the archiso
+    mkinitcpio drop-in), generates `/etc/machine-id` (the upstream `machineid`
+    module is omitted because it calls `systemd-machine-id-setup`), builds a
+    normal initramfs for `/boot/vmlinuz-linux`, enables dinit services
+    (`dbus`, `logind`, `NetworkManager`, `greetd`, `qemu-ga`, serial getty),
+    deletes `liveuser`, removes any empty `~/.config/dinit.d/boot` left by
+    Calamares' skel copy (otherwise userspawn cannot install the real boot
+    service and dbus/pipewire never start), and rewrites greetd autologin for
+    the new user.
+  - `cosmalia-limine-install` copies `BOOTX64.EFI` to the ESP fallback path,
+    copies kernel + initramfs to the ESP root, and writes `limine.conf` with
+    `root=UUID=…` from the generated fstab. BIOS installs call
+    `limine bios-install`; UEFI installs also try `efibootmgr`.
+- No Boost ABI shim is needed: the Artix `calamares` package matches the
+  `boost-libs` in the same repository.
+
+### VM verification
+
+```sh
+./test-installer.sh                 # live ISO + blank 40 GiB virtio disk, starts Calamares
+python3 installer-drive.py test-results/installer   # drive the wizard to the end
+./test-installed.sh                 # boot the installed disk without the ISO
+```
+
+Evidence lands in `test-results/installer/`: `installer-report.txt`,
+`installer-welcome.png`, `final-installed-page.png`, `installed-report.txt`,
+`installed-desktop.png` and `disk.qcow2`. For an interactive session use
+`./run-installer-vm.sh` (VNC `127.0.0.1:5909`), then `./run-installed-vm.sh`
+(VNC `127.0.0.1:5910`); both leave the monitor/QMP/QGA sockets available for
+`qga.py`, `vmctl.py` and `installer-drive.py`.
 
 ## Real hardware (AMD/Intel): black screen after the boot loader
 
@@ -183,6 +238,11 @@ DRM diagnostics (card list + drivers, GPU modules, `lspci -nnk`, filtered
 cosmalia-session-dinit/iso/   # in the git checkout; also mirrored in /tmp
 ├── build.sh          # builds the local package + the ISO
 ├── test.sh           # headless QEMU verification (evidence in test-results/)
+├── test-installer-full.sh  # full installer + installed-disk test
+├── test-installer.sh / test-installed.sh
+├── run-installer-vm.sh / run-installed-vm.sh
+├── installer-probe.py / installer-drive.py / installed-probe.py
+├── qga.py / vmctl.py  # QEMU guest-agent / monitor helpers
 ├── run.sh            # interactive QEMU with host internet
 ├── qemu-probe.py     # serial-console + HMP probe used by test.sh
 ├── out/              # generated ISOs (gitignored, chowned to the builder)
